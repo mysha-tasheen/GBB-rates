@@ -1,5 +1,4 @@
 from ninja import Router
-
 from apps.api.auth import api_key_auth
 
 router = Router(tags=["auth"])

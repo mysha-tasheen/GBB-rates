@@ -28,12 +28,14 @@ router = Router(tags=["bookings"])
 async def create_alternative_prebooks(
     request, reference: str, payload: AlternativePrebooksRequest
 ):
-    """Search alternative rates for amending check-in, check-out, or occupancy."""
+    
     agent, _ = request.auth
     agent_id = str(agent.id)
 
     try:
-        supplier_booking_id, local = resolve_supplier_booking_id(agent_id, reference)
+        supplier_booking_id, local = await resolve_supplier_booking_id(
+            agent_id, reference
+        )
     except HttpError:
         raise
 

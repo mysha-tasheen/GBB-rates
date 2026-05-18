@@ -1,20 +1,33 @@
-import httpx
+import urllib.request
+import urllib.parse
+import json
 from datetime import date
-from typing import List, Dict, Any, Optional
-import logging
 
-from apps.core.pricing import calculate_agent_price
+# Dummy placeholders replacing async/await, httpx, and logging for pure Python.
+# In a true synchronous/pure Python context, we would use urllib for HTTP, and remove all async/await usage.
 
-from .base import BaseAdapter
+def calculate_agent_price(supplier_price, commission_percent):
+    # Dummy placeholder since original is imported
+    class Pricing:
+        def __init__(self, sp, cp):
+            self.supplier_price = sp
+            self.commission_percent = cp
+            self.commission_amount = sp * cp / 100
+            self.agent_price = sp + self.commission_amount
+    return Pricing(supplier_price, commission_percent)
 
-logger = logging.getLogger(__name__)
+class BaseAdapter:
+    def __init__(self, credentials, commission_percent):
+        self.credentials = credentials
+        self.commission_percent = commission_percent
 
 class LiteAPIAdapter(BaseAdapter):
     """
     Adapter for LiteAPI Travel (https://api.liteapi.travel)
+    Note: This is a pure Python synchronous version.
     """
     
-    def __init__(self, credentials: Dict[str, Any], commission_percent: float):
+    def __init__(self, credentials, commission_percent):
         super().__init__(credentials, commission_percent)
         self.api_key = credentials.get("api_key")
         self.base_url = credentials.get("base_url", "https://api.liteapi.travel/v3.0")
@@ -22,94 +35,68 @@ class LiteAPIAdapter(BaseAdapter):
             "book_base_url", "https://book.liteapi.travel/v3.0"
         )
     
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self):
         return {
             "X-API-Key": self.api_key,
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
 
-    async def _get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(
-                f"{self.base_url}{endpoint}",
-                headers=self._headers(),
-                params=params,
-            )
-            response.raise_for_status()
-            return response.json()
+    def _get(self, endpoint, params=None):
+        url = self.base_url + endpoint
+        if params:
+            url += '?' + urllib.parse.urlencode(params)
+        req = urllib.request.Request(url, headers=self._headers())
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return json.loads(response.read().decode())
 
-    async def _request(self, endpoint: str, data: Dict) -> Dict:
-        """Make authenticated POST request to LiteAPI search/data API."""
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                f"{self.base_url}{endpoint}",
-                headers=self._headers(),
-                json=data,
-            )
-            response.raise_for_status()
-            return response.json()
+    def _request(self, endpoint, data):
+        url = self.base_url + endpoint
+        req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=self._headers())
+        req.method = "POST"
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return json.loads(response.read().decode())
 
-    async def _book_request(self, endpoint: str, data: Dict) -> Dict:
-        """Make authenticated POST request to LiteAPI book API."""
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(
-                f"{self.book_base_url}{endpoint}",
-                headers=self._headers(),
-                json=data,
-            )
-            response.raise_for_status()
-            return response.json()
+    def _book_request(self, endpoint, data):
+        url = self.book_base_url + endpoint
+        req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=self._headers())
+        req.method = "POST"
+        with urllib.request.urlopen(req, timeout=60) as response:
+            return json.loads(response.read().decode())
 
-    async def _book_get(
-        self, endpoint: str, params: Optional[Dict[str, Any]] = None
-    ) -> Dict:
-        """Make authenticated GET request to LiteAPI book API."""
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(
-                f"{self.book_base_url}{endpoint}",
-                headers=self._headers(),
-                params=params,
-            )
-            response.raise_for_status()
-            return response.json()
+    def _book_get(self, endpoint, params=None):
+        url = self.book_base_url + endpoint
+        if params:
+            url += '?' + urllib.parse.urlencode(params)
+        req = urllib.request.Request(url, headers=self._headers())
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return json.loads(response.read().decode())
 
-    async def _book_put(
-        self,
-        endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
-    ) -> Dict:
-        """Make authenticated PUT request to LiteAPI book API."""
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.put(
-                f"{self.book_base_url}{endpoint}",
-                headers=self._headers(),
-                params=params,
-                json=data,
-            )
-            response.raise_for_status()
-            if not response.content:
+    def _book_put(self, endpoint, params=None, data=None):
+        url = self.book_base_url + endpoint
+        if params:
+            url += '?' + urllib.parse.urlencode(params)
+        req = urllib.request.Request(url, headers=self._headers())
+        req.method = "PUT"
+        if data:
+            req.data = json.dumps(data).encode()
+        with urllib.request.urlopen(req, timeout=60) as response:
+            content = response.read()
+            if not content:
                 return {}
-            return response.json()
+            return json.loads(content.decode())
 
-    async def get_countries(self) -> List[Dict[str, str]]:
+    def get_countries(self):
         """GET /data/countries — ISO-2 codes and names."""
-        response = await self._get("/data/countries")
+        response = self._get("/data/countries")
         return [
             {"code": item["code"], "name": item["name"]}
             for item in response.get("data", [])
         ]
 
-    async def get_hotels(
-        self,
-        country_code: str,
-        city_name: Optional[str] = None,
-        offset: int = 0,
-        limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    def get_hotels(self, country_code, city_name=None, offset=0, limit=50):
         """GET /data/hotels — hotels in a country (optionally filtered by city)."""
-        params: Dict[str, Any] = {
+        params = {
             "countryCode": country_code.upper(),
             "offset": max(offset, 0),
             "limit": min(max(limit, 1), 200),
@@ -117,7 +104,7 @@ class LiteAPIAdapter(BaseAdapter):
         if city_name:
             params["cityName"] = city_name
 
-        response = await self._get("/data/hotels", params=params)
+        response = self._get("/data/hotels", params=params)
         hotels = []
         for item in response.get("data", []):
             hotels.append(
@@ -132,21 +119,12 @@ class LiteAPIAdapter(BaseAdapter):
                 }
             )
         return hotels
-    
-    async def search_hotel_rates(
-        self,
-        hotel_id: str,
-        check_in: date,
-        check_out: date,
-        guests: int,
-        currency: str = "USD",
-        guest_nationality: str = "US",
-    ) -> Dict[str, Any]:
+
+    def search_hotel_rates(self, hotel_id, check_in, check_out, guests, currency="USD", guest_nationality="US"):
         """
         Search hotel rates from LiteAPI
         POST /v3.0/hotels/rates
         """
-        
         request_data = {
             "hotelIds": [hotel_id],
             "checkin": check_in.isoformat(),
@@ -156,26 +134,15 @@ class LiteAPIAdapter(BaseAdapter):
             "occupancies": [{"adults": guests}],
             "includeHotelData": True,
         }
-        
-        response = await self._request("/hotels/rates", request_data)
+        response = self._request("/hotels/rates", request_data)
 
         if not response.get("data"):
-            logger.warning(
-                "LiteAPI returned no rate data for hotel %s (check dates, hotel_id, nationality)",
-                hotel_id,
-            )
+            # no logging in pure python
+            pass
 
         return self._process_response(response, check_in, check_out, guests)
 
-    async def get_min_rates(
-        self,
-        hotel_ids: List[str],
-        check_in: date,
-        check_out: date,
-        guests: int,
-        currency: str = "USD",
-        guest_nationality: str = "US",
-    ) -> List[Dict[str, Any]]:
+    def get_min_rates(self, hotel_ids, check_in, check_out, guests, currency="USD", guest_nationality="US"):
         """POST /hotels/min-rates — cheapest rate per hotel (for listing pages)."""
         if not hotel_ids:
             return []
@@ -189,7 +156,7 @@ class LiteAPIAdapter(BaseAdapter):
             "occupancies": [{"adults": guests}],
         }
 
-        response = await self._request("/hotels/min-rates", request_data)
+        response = self._request("/hotels/min-rates", request_data)
         results = []
 
         for item in response.get("data", []):
@@ -210,9 +177,8 @@ class LiteAPIAdapter(BaseAdapter):
 
         return results
 
-    def _process_response(self, response: Dict, check_in: date, check_out: date, guests: int) -> Dict:
+    def _process_response(self, response, check_in, check_out, guests):
         """Extract only essential fields from LiteAPI response"""
-        
         nights = (check_out - check_in).days
         data_list = response.get("data", [])
 
@@ -284,24 +250,16 @@ class LiteAPIAdapter(BaseAdapter):
         return processed
     
     # Required BaseAdapter methods
-    async def get_hotel_rates(
-        self,
-        hotel_id: str,
-        check_in: date,
-        check_out: date,
-        guests: int,
-        currency: str = "USD",
-        guest_nationality: str = "US",
-    ) -> List[Dict]:
+    def get_hotel_rates(self, hotel_id, check_in, check_out, guests, currency="USD", guest_nationality="US"):
         """BaseAdapter interface method"""
-        result = await self.search_hotel_rates(
+        result = self.search_hotel_rates(
             hotel_id, check_in, check_out, guests, currency, guest_nationality
         )
         return [result]
     
-    async def get_minimum_rate(self, hotel_id: str, check_in: date, check_out: date, guests: int) -> Optional[Dict]:
+    def get_minimum_rate(self, hotel_id, check_in, check_out, guests):
         """Get cheapest rate"""
-        result = await self.search_hotel_rates(hotel_id, check_in, check_out, guests)
+        result = self.search_hotel_rates(hotel_id, check_in, check_out, guests)
         
         # Find the cheapest rate across all rooms
         all_rates = []
@@ -314,41 +272,28 @@ class LiteAPIAdapter(BaseAdapter):
         
         cheapest = min(all_rates, key=lambda x: x["_agent_price"])
         return cheapest
-    
-    async def create_prebook(
-        self,
-        offer_id: str,
-        use_payment_sdk: bool = False,
-        voucher_code: Optional[str] = None,
-    ) -> Dict[str, Any]:
+
+    def create_prebook(self, offer_id, use_payment_sdk=False, voucher_code=None):
         """POST /rates/prebook on book API — verify availability and lock pricing."""
-        payload: Dict[str, Any] = {
+        payload = {
             "offerId": offer_id,
             "usePaymentSdk": use_payment_sdk,
         }
         if voucher_code:
             payload["voucherCode"] = voucher_code
 
-        response = await self._book_request("/rates/prebook", payload)
+        response = self._book_request("/rates/prebook", payload)
         return response.get("data", {})
-    
-    async def confirm_booking(
-        self,
-        prebook_id: str,
-        holder: Dict[str, Any],
-        guests: List[Dict[str, Any]],
-        payment_method: str = "ACC_CREDIT_CARD",
-        transaction_id: Optional[str] = None,
-        client_reference: Optional[str] = None,
-    ) -> Dict[str, Any]:
+
+    def confirm_booking(self, prebook_id, holder, guests, payment_method="ACC_CREDIT_CARD", transaction_id=None, client_reference=None):
         """POST /rates/book — confirm reservation after prebook."""
-        payment: Dict[str, Any] = {"method": payment_method}
+        payment = {"method": payment_method}
         if payment_method == "TRANSACTION":
             if not transaction_id:
                 raise ValueError("transaction_id is required when payment_method is TRANSACTION")
             payment["transactionId"] = transaction_id
 
-        payload: Dict[str, Any] = {
+        payload = {
             "prebookId": prebook_id,
             "holder": holder,
             "guests": guests,
@@ -357,41 +302,32 @@ class LiteAPIAdapter(BaseAdapter):
         if client_reference:
             payload["clientReference"] = client_reference
 
-        response = await self._book_request("/rates/book", payload)
+        response = self._book_request("/rates/book", payload)
         return response.get("data", {})
-    
-    async def get_prebook(
-        self,
-        prebook_id: str,
-        include_credit_balance: bool = False,
-    ) -> Dict[str, Any]:
+
+    def get_prebook(self, prebook_id, include_credit_balance=False):
         """GET /prebooks/{prebookId} — retrieve an existing prebook session."""
-        params: Dict[str, Any] = {}
+        params = {}
         if include_credit_balance:
             params["includeCreditBalance"] = True
 
-        response = await self._book_get(
+        response = self._book_get(
             f"/prebooks/{prebook_id}",
             params=params or None,
         )
         return response.get("data", {})
-    
-    async def get_booking(self, booking_id: str) -> Dict[str, Any]:
+
+    def get_booking(self, booking_id):
         """GET /bookings/{bookingId} — retrieve a single booking."""
-        response = await self._book_get(f"/bookings/{booking_id}")
+        response = self._book_get(f"/bookings/{booking_id}")
         return response.get("data", {})
 
-    async def list_bookings(
-        self,
-        guest_id: Optional[str] = None,
-        client_reference: Optional[str] = None,
-        timeout: Optional[float] = None,
-    ) -> List[Dict[str, Any]]:
+    def list_bookings(self, guest_id=None, client_reference=None, timeout=None):
         """GET /bookings — search by guestId and/or clientReference."""
         if not guest_id and not client_reference:
             raise ValueError("guest_id or client_reference is required")
 
-        params: Dict[str, Any] = {}
+        params = {}
         if guest_id:
             params["guestId"] = guest_id
         if client_reference:
@@ -399,21 +335,21 @@ class LiteAPIAdapter(BaseAdapter):
         if timeout is not None:
             params["timeout"] = timeout
 
-        response = await self._book_get("/bookings", params=params)
+        response = self._book_get("/bookings", params=params)
         return response.get("data", [])
 
-    async def list_all_bookings(
+    def list_all_bookings(
         self,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        booking_start_date: Optional[str] = None,
-        booking_end_date: Optional[str] = None,
-        status: Optional[str] = None,
-        payment_status: Optional[str] = None,
-        timeout: Optional[float] = None,
-    ) -> tuple[int, List[Dict[str, Any]]]:
+        start_date=None,
+        end_date=None,
+        booking_start_date=None,
+        booking_end_date=None,
+        status=None,
+        payment_status=None,
+        timeout=None,
+    ):
         """GET /bookings — all bookings for the API key with optional filters."""
-        params: Dict[str, Any] = {}
+        params = {}
         if start_date:
             params["startDate"] = start_date
         if end_date:
@@ -429,37 +365,33 @@ class LiteAPIAdapter(BaseAdapter):
         if timeout is not None:
             params["timeout"] = timeout
 
-        response = await self._book_get("/bookings", params=params or None)
+        response = self._book_get("/bookings", params=params or None)
         data = response.get("data", [])
         return response.get("count", len(data)), data
-    
-    async def cancel_booking(
-        self,
-        booking_id: str,
-        timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+
+    def cancel_booking(self, booking_id, timeout=None):
         """PUT /bookings/{bookingId} — cancel a confirmed booking."""
-        params: Dict[str, Any] = {}
+        params = {}
         if timeout is not None:
             params["timeout"] = timeout
 
-        response = await self._book_put(
+        response = self._book_put(
             f"/bookings/{booking_id}",
             params=params or None,
         )
         return response.get("data", {})
-    
-    async def create_alternative_prebooks(
+
+    def create_alternative_prebooks(
         self,
-        booking_id: str,
-        occupancies: List[Dict[str, Any]],
-        checkin: str,
-        checkout: str,
-        refundable_rates_only: bool = False,
-        board_type: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        booking_id,
+        occupancies,
+        checkin,
+        checkout,
+        refundable_rates_only=False,
+        board_type=None,
+    ):
         """POST /bookings/{bookingId}/alternative-prebooks — amend dates/occupancy."""
-        payload: Dict[str, Any] = {
+        payload = {
             "occupancies": occupancies,
             "checkin": checkin,
             "checkout": checkout,
@@ -469,31 +401,26 @@ class LiteAPIAdapter(BaseAdapter):
         if board_type:
             payload["boardType"] = board_type
 
-        response = await self._book_request(
+        response = self._book_request(
             f"/bookings/{booking_id}/alternative-prebooks",
             payload,
         )
         return response.get("data", [])
 
-    async def amend_guest_name(
-        self,
-        booking_id: str,
-        holder: Dict[str, Any],
-        remarks: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    def amend_guest_name(self, booking_id, holder, remarks=None):
         """PUT /bookings/{bookingId}/amend — update holder name and email."""
-        payload: Dict[str, Any] = {"holder": holder}
+        payload = {"holder": holder}
         if remarks:
             payload["remarks"] = remarks
 
-        response = await self._book_put(
+        response = self._book_put(
             f"/bookings/{booking_id}/amend",
             data=payload,
         )
         if response.get("bookingId"):
             return response
         return response.get("data", response)
-    
-    async def amend_dates(self, booking_id: str, check_in: date, check_out: date, guests: int) -> Dict:
+
+    def amend_dates(self, booking_id, check_in, check_out, guests):
         """Amend dates"""
         return {"booking_id": booking_id, "dates_updated": True}

@@ -1,13 +1,13 @@
 import logging
 
 import httpx
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from ninja import Router
 from ninja.errors import HttpError
 
 from apps.api.auth import api_key_auth
 from apps.api.v1.endpoints.bookings_common import (
-    booking_repo,
     booking_service,
     logger,
     resolve_supplier_booking_id,
@@ -19,12 +19,14 @@ router = Router(tags=["bookings"])
 
 @router.get("/bookings/{reference}", response=BookingDetailResponse, auth=api_key_auth)
 async def get_booking(request, reference: str):
-    """Retrieve a single booking by GBB `booking_id` or supplier `supplier_booking_id`."""
+
     agent, _ = request.auth
     agent_id = str(agent.id)
 
     try:
-        supplier_booking_id, local = resolve_supplier_booking_id(agent_id, reference)
+        supplier_booking_id, local = await resolve_supplier_booking_id(
+            agent_id, reference
+        )
     except HttpError:
         raise
 
@@ -44,6 +46,8 @@ async def get_booking(request, reference: str):
         raise HttpError(502, detail) from exc
 
     if not local:
-        local = booking_repo.find_for_supplier_item(agent_id, raw)
+        local = await sync_to_async(
+            booking_service.find_local_for_supplier_item, thread_sensitive=True
+        )(agent_id, raw)
 
     return BookingDetailResponse(**booking_service.parse_booking_detail(raw, local=local))

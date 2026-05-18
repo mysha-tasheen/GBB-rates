@@ -1,11 +1,11 @@
 import logging
 
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from ninja import Query, Router
 from ninja.errors import HttpError
-
 from apps.api.auth import api_key_auth
-from apps.api.v1.endpoints.bookings_common import booking_repo, booking_service, logger
+from apps.api.v1.endpoints.bookings_common import booking_service, logger
 from apps.api.v1.schemas.booking_schemas import (
     CreditLineInfo,
     PrebookRequest,
@@ -36,25 +36,22 @@ def _to_prebook_response(agent_view: dict, booking_id: str | None = None) -> Pre
 
 @router.post("/bookings/prebook", response=PrebookResponse, auth=api_key_auth)
 async def create_prebook(request, payload: PrebookRequest):
-    """
-    Step 1 — Create a prebook session (verify availability + final price).
-
-    Use `offer_id` from POST /hotel-rates or POST /hotel-min-rates.
-    """
+    
     agent, _ = request.auth
 
     try:
-        agent_view, internal = await booking_service.prebook(
+        agent_prebook, internal = await booking_service.prebook(
             offer_id=payload.offer_id,
             use_payment_sdk=payload.use_payment_sdk,
             agent_commission=payload.commission,
             voucher_code=payload.voucher_code,
         )
-        record = booking_repo.create_prebook(
+        record = await sync_to_async(booking_service.save_prebook, thread_sensitive=True)(
             agent_id=str(agent.id),
-            agent_view=agent_view,
+            agent=agent_prebook,
             internal=internal,
         )
+        agent_view = agent_prebook.to_agent_dict()
     except ValueError as exc:
         raise HttpError(503, str(exc)) from exc
     except Exception as exc:
@@ -72,18 +69,21 @@ async def get_prebook(
     commission: float = Query(0, ge=0),
     include_credit_balance: bool = Query(False),
 ):
-    """Retrieve an existing prebook session by supplier `prebook_id`."""
+    
     agent, _ = request.auth
 
-    local = booking_repo.find_by_prebook_for_agent(str(agent.id), prebook_id)
+    local = await sync_to_async(
+        booking_service.find_local_by_prebook, thread_sensitive=True
+    )(str(agent.id), prebook_id)
     agent_commission = local.agent_commission if local else commission
 
     try:
-        agent_view = await booking_service.get_prebook(
+        agent_prebook = await booking_service.get_prebook(
             prebook_id=prebook_id,
             agent_commission=agent_commission,
             include_credit_balance=include_credit_balance,
         )
+        agent_view = agent_prebook.to_agent_dict()
     except ValueError as exc:
         raise HttpError(404, str(exc)) from exc
     except Exception as exc:

@@ -1,37 +1,16 @@
 import logging
 from datetime import date
-from typing import Any, Dict, List, Protocol
+from typing import Any, Dict, List
+from apps.core.ports.search import SearchSupplierPort
 
 logger = logging.getLogger(__name__)
 
 
-class SearchAdapter(Protocol):
-    async def get_hotel_rates(
-        self,
-        hotel_id: str,
-        check_in: date,
-        check_out: date,
-        guests: int,
-        currency: str = "USD",
-        guest_nationality: str = "US",
-    ) -> List[Dict[str, Any]]: ...
-
-    async def get_min_rates(
-        self,
-        hotel_ids: List[str],
-        check_in: date,
-        check_out: date,
-        guests: int,
-        currency: str = "USD",
-        guest_nationality: str = "US",
-    ) -> List[Dict[str, Any]]: ...
-
-
 class SearchService:
-    """Pure Python multi-supplier search orchestration."""
+    
 
-    def __init__(self, adapters: Dict[str, SearchAdapter]):
-        self._adapters = adapters
+    def __init__(self, suppliers: Dict[str, SearchSupplierPort]):
+        self._suppliers = suppliers
 
     async def search_all_suppliers(
         self,
@@ -42,15 +21,15 @@ class SearchService:
         currency: str = "USD",
         guest_nationality: str = "US",
     ) -> List[Dict[str, Any]]:
-        if not self._adapters:
+        if not self._suppliers:
             logger.error("No active suppliers — cannot fetch hotel rates")
             return []
 
         all_results: List[Dict[str, Any]] = []
 
-        for supplier_name, adapter in self._adapters.items():
+        for supplier_name, supplier in self._suppliers.items():
             try:
-                results = await adapter.get_hotel_rates(
+                results = await supplier.get_hotel_rates(
                     hotel_id=hotel_id,
                     check_in=check_in,
                     check_out=check_out,
@@ -74,14 +53,14 @@ class SearchService:
         currency: str = "USD",
         guest_nationality: str = "US",
     ) -> List[Dict[str, Any]]:
-        if not self._adapters:
+        if not self._suppliers:
             logger.error("No active suppliers — cannot fetch min rates")
             return []
 
         all_rates: List[Dict[str, Any]] = []
 
-        for supplier_name, adapter in self._adapters.items():
-            get_min_rates = getattr(adapter, "get_min_rates", None)
+        for supplier_name, supplier in self._suppliers.items():
+            get_min_rates = getattr(supplier, "get_min_rates", None)
             if not get_min_rates:
                 continue
             try:

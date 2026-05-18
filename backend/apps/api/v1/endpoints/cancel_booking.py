@@ -1,13 +1,12 @@
 import logging
 
 import httpx
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from ninja import Query, Router
 from ninja.errors import HttpError
-
 from apps.api.auth import api_key_auth
 from apps.api.v1.endpoints.bookings_common import (
-    booking_repo,
     booking_service,
     logger,
     resolve_supplier_booking_id,
@@ -23,16 +22,18 @@ async def cancel_booking(
     reference: str,
     timeout: float = Query(4, ge=1, le=30),
 ):
-    """Cancel a confirmed booking."""
+
     agent, _ = request.auth
     agent_id = str(agent.id)
 
     try:
-        supplier_booking_id, local = resolve_supplier_booking_id(agent_id, reference)
+        supplier_booking_id, local = await resolve_supplier_booking_id(
+            agent_id, reference
+        )
     except HttpError:
         raise
 
-    if local and local.status == "cancelled":
+    if local and local.is_cancelled:
         raise HttpError(400, "Booking is already cancelled")
 
     try:
@@ -42,7 +43,9 @@ async def cancel_booking(
             timeout=timeout,
         )
         if local:
-            booking_repo.mark_cancelled(local.id)
+            await sync_to_async(booking_service.mark_cancelled, thread_sensitive=True)(
+                local.id
+            )
     except ValueError as exc:
         raise HttpError(400, str(exc)) from exc
     except httpx.HTTPStatusError as exc:

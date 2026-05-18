@@ -1,20 +1,22 @@
-from ninja.errors import HttpError
-from apps.core.repositories.booking import BookingRepository
-from apps.core.wiring import build_booking_service
 import logging
 
+from asgiref.sync import sync_to_async
+from ninja.errors import HttpError
+
+from apps.api.lazy import LazyService
+from apps.core.wiring import build_booking_service
 
 logger = logging.getLogger(__name__)
 
-booking_service = build_booking_service()
-booking_repo = BookingRepository()
+booking_service = LazyService(build_booking_service)
 
 
-def resolve_supplier_booking_id(agent_id: str, reference: str):
-    
-    local = booking_repo.find_by_reference_for_agent(agent_id, reference)
-    if local and local.supplier_booking_id:
-        return local.supplier_booking_id, local
-    if local:
-        raise HttpError(404, "Booking is not yet confirmed with the supplier")
-    return reference, None
+async def resolve_supplier_booking_id(agent_id: str, reference: str):
+    """Return (supplier_booking_id, local Booking) for a path reference."""
+    try:
+        return await sync_to_async(
+            booking_service.resolve_supplier_reference,
+            thread_sensitive=True,
+        )(agent_id, reference)
+    except ValueError as exc:
+        raise HttpError(404, str(exc)) from exc

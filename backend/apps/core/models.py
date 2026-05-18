@@ -1,12 +1,9 @@
 from uuid import uuid4
-
 from django.db import models
-
 from apps.agents.models import Agent
 
-
 class Supplier(models.Model):
-    """Supplier config — commission % is applied in middleware, not shown to agents."""
+    
 
     name = models.CharField(max_length=50, unique=True, help_text="e.g. liteapi")
     display_name = models.CharField(max_length=100)
@@ -27,7 +24,7 @@ class Supplier(models.Model):
 
 
 class Booking(models.Model):
-    """Internal booking record with full price breakdown (not shown to agents)."""
+    
 
     class Status(models.TextChoices):
         PREBOOKED = "prebooked", "Prebooked"

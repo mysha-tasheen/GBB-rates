@@ -1,22 +1,26 @@
-"""Django-aware factories: config, repositories, and adapter wiring."""
-
 import json
 import logging
 from pathlib import Path
 from typing import Dict
-
 from apps.core.adapters import registry
 from apps.core.adapters.base import BaseAdapter
 from apps.core.adapters.liteapi import LiteAPIAdapter
 from apps.core.config import get_nuitee_config
+from apps.core.repositories.booking import BookingRepository
 from apps.core.repositories.supplier import SupplierRepository
 from apps.core.services.booking_service import BookingService
 from apps.core.services.catalog_service import CatalogService
+from apps.core.services.commission_service import CommissionService
 from apps.core.services.search_service import SearchService
 
 logger = logging.getLogger(__name__)
 
 _supplier_repo = SupplierRepository()
+_commission_service = CommissionService(_supplier_repo)
+
+
+def build_commission_service() -> CommissionService:
+    return _commission_service
 
 
 def _config_path() -> Path:
@@ -37,7 +41,7 @@ def _load_adapters_from_json() -> Dict[str, BaseAdapter]:
             continue
 
         name = supplier_config["name"]
-        commission = _supplier_repo.commission_percent(name)
+        commission = _commission_service.platform_percent(name)
         credentials = supplier_config["credentials"]
 
         try:
@@ -58,7 +62,7 @@ def _load_adapters_from_env() -> Dict[str, BaseAdapter]:
         return {}
 
     try:
-        commission = _supplier_repo.commission_percent("liteapi")
+        commission = _commission_service.platform_percent("liteapi")
         adapter = registry.get_adapter(
             "liteapi",
             {"api_key": cfg.api_key, "base_url": cfg.api_url},
@@ -96,7 +100,7 @@ def build_booking_service() -> BookingService:
     if not cfg.api_key:
         raise ValueError("NUITEE_API_KEY is not configured")
 
-    commission = _supplier_repo.commission_percent("liteapi")
+    commission = _commission_service.platform_percent("liteapi")
     adapter = LiteAPIAdapter(
         credentials={
             "api_key": cfg.api_key,
@@ -105,4 +109,4 @@ def build_booking_service() -> BookingService:
         },
         commission_percent=commission,
     )
-    return BookingService(adapter, commission)
+    return BookingService(adapter, _commission_service, BookingRepository())

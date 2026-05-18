@@ -18,12 +18,14 @@ router = Router(tags=["bookings"])
 
 @router.put("/bookings/{reference}/amend", response=AmendGuestResponse, auth=api_key_auth)
 async def amend_guest_name(request, reference: str, payload: AmendGuestRequest):
-    """Amend the booking holder's first name, last name, and email."""
+    
     agent, _ = request.auth
     agent_id = str(agent.id)
 
     try:
-        supplier_booking_id, local = resolve_supplier_booking_id(agent_id, reference)
+        supplier_booking_id, local = await resolve_supplier_booking_id(
+            agent_id, reference
+        )
     except HttpError:
         raise
 

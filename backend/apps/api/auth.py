@@ -1,5 +1,6 @@
 from typing import Optional, Tuple
 
+from asgiref.sync import sync_to_async
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -11,7 +12,18 @@ from apps.agents.models import Agent, AgentApiKey
 class AgentApiKeyAuth(APIKeyHeader):
     param_name = "Authorization"
 
-    def authenticate(self, request, key: str) -> Optional[Tuple[Agent, AgentApiKey]]:
+    async def authenticate(
+        self, request, key: str
+    ) -> Optional[Tuple[Agent, AgentApiKey]]:
+        return await sync_to_async(self._authenticate_sync, thread_sensitive=True)(
+            request, key
+        )
+
+    def _authenticate_sync(
+        self, request, key: str
+    ) -> Optional[Tuple[Agent, AgentApiKey]]:
+        if not key:
+            return None
         if key.startswith("ApiKey "):
             key = key[7:]
         elif key.startswith("Bearer "):

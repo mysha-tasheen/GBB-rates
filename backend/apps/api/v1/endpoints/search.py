@@ -1,49 +1,36 @@
-import logging
-
 from ninja import Query, Router
-from ninja.errors import HttpError
 
 from apps.api.auth import api_key_auth
-from apps.api.v1.mappers import map_hotel_min_rates_for_agent, map_hotel_rates_for_agent
-from apps.core.pricing import apply_agent_commission, apply_agent_commission_to_min_rates
+from apps.api.v1.endpoints.search_common import (
+    catalog_service,
+    commission_service,
+    logger,
+    search_service,
+    supplier_error,
+)
+from apps.api.v1.endpoints.search_minimum import router as search_minimum_router
+from apps.api.v1.mappers import map_hotel_rates_for_agent
 from apps.api.v1.schemas.search_schemas import (
     CountriesResponse,
     Country,
     HotelEssential,
     HotelListResponse,
-    HotelMinRatesRequest,
-    HotelMinRatesResponse,
     HotelRatesRequest,
     HotelSummary,
     SearchResponseEssential,
 )
-from apps.core.wiring import build_catalog_service, build_search_service
 
 router = Router(tags=["search"])
-logger = logging.getLogger(__name__)
-
-catalog_service = build_catalog_service()
-search_service = build_search_service()
-
-
-def _supplier_error(exc: Exception, message: str) -> None:
-    if isinstance(exc, ValueError):
-        raise HttpError(503, str(exc)) from exc
-    logger.exception(message)
-    raise HttpError(502, message) from exc
+router.add_router("", search_minimum_router)
 
 
 @router.get("/countries", response=CountriesResponse, auth=api_key_auth)
 async def list_countries(request):
-    """
-    Step 1 — List countries (ISO-2 codes).
-
-    Use `code` as `country_code` on GET /hotels and as `guest_nationality` on POST /hotel-rates.
-    """
+    
     try:
         countries = await catalog_service.list_countries()
     except Exception as exc:
-        _supplier_error(exc, "Unable to load countries from supplier")
+        supplier_error(exc, "Unable to load countries from supplier")
 
     items = [Country(code=c["code"], name=c["name"]) for c in countries]
     return CountriesResponse(countries=items, total=len(items))
@@ -57,11 +44,7 @@ async def list_hotels(
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ):
-    """
-    Step 2 — List hotels in a country.
-
-    Pick `hotel_id` values, then call POST /hotel-min-rates or POST /hotel-rates.
-    """
+    
     country_code = country_code.upper()
 
     try:
@@ -72,7 +55,7 @@ async def list_hotels(
             limit=limit,
         )
     except Exception as exc:
-        _supplier_error(exc, "Unable to load hotels from supplier")
+        supplier_error(exc, "Unable to load hotels from supplier")
 
     items = [
         HotelSummary(
@@ -97,46 +80,11 @@ async def list_hotels(
     )
 
 
-@router.post("/hotel-min-rates", response=HotelMinRatesResponse, auth=api_key_auth)
-async def search_hotel_min_rates(request, payload: HotelMinRatesRequest):
-    """
-    Cheapest rate per hotel — for listing pages after GET /hotels.
-
-    Returns `hotel_id`, `price`, and `offer_id` only. Use POST /hotel-rates for full room detail.
-    """
-    agent, _ = request.auth
-    logger.info(
-        f"Agent {agent.company_name} min-rates for {len(payload.hotel_ids)} hotels"
-    )
-
-    rates = await search_service.get_hotel_min_rates(
-        hotel_ids=payload.hotel_ids,
-        check_in=payload.check_in,
-        check_out=payload.check_out,
-        guests=payload.guests,
-        currency=payload.currency,
-        guest_nationality=payload.guest_nationality.upper(),
-    )
-
-    rates = apply_agent_commission_to_min_rates(rates, payload.commission)
-
-    return map_hotel_min_rates_for_agent(
-        rates,
-        check_in=payload.check_in.isoformat(),
-        check_out=payload.check_out.isoformat(),
-        currency=payload.currency,
-    )
-
-
 @router.post("/hotel-rates", response=SearchResponseEssential, auth=api_key_auth)
 async def search_hotel_rates(request, payload: HotelRatesRequest):
-    """
-    Step 3 — Get bookable rates for a hotel.
-
-    Use `hotel_id` from GET /hotels.
-    """
-    agent, api_key_obj = request.auth
-    logger.info(f"Agent {agent.company_name} searching hotel {payload.hotel_id}")
+    
+    agent, _ = request.auth
+    logger.info("Agent %s searching hotel %s", agent.company_name, payload.hotel_id)
 
     nights = (payload.check_out - payload.check_in).days
     guest_nationality = payload.guest_nationality.upper()
@@ -166,5 +114,5 @@ async def search_hotel_rates(request, payload: HotelRatesRequest):
             total_suppliers=0,
         )
 
-    result = apply_agent_commission(results[0], payload.commission)
+    result = commission_service.apply_flat_to_hotel_rates(results[0], payload.commission)
     return map_hotel_rates_for_agent(result, total_suppliers=len(results))

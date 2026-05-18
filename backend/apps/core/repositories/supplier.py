@@ -1,7 +1,5 @@
 import logging
-
 from django.db.utils import OperationalError
-
 from apps.core.config import get_nuitee_config
 from apps.core.models import Supplier
 
@@ -9,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 class SupplierRepository:
-    """Django ORM access for supplier commission rates."""
+    
 
     def commission_percent(self, supplier_name: str) -> float:
         fallback = get_nuitee_config().default_commission_percent

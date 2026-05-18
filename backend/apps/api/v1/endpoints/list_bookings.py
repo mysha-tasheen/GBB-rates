@@ -1,12 +1,12 @@
 import logging
 from datetime import date
 
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from ninja import Query, Router
 from ninja.errors import HttpError
-
 from apps.api.auth import api_key_auth
-from apps.api.v1.endpoints.bookings_common import booking_repo, booking_service, logger
+from apps.api.v1.endpoints.bookings_common import booking_service, logger
 from apps.api.v1.schemas.booking_schemas import BookingListItem, BookingListResponse
 
 router = Router(tags=["bookings"])
@@ -25,9 +25,7 @@ async def list_bookings(
     payment_status: str | None = Query(None),
     timeout: float = Query(4, ge=1, le=30),
 ):
-    """
-    List bookings — search by `guest_id` / `client_reference`, or omit both for all bookings.
-    """
+    
     agent, _ = request.auth
     agent_id = str(agent.id)
 
@@ -64,7 +62,9 @@ async def list_bookings(
 
     items = []
     for raw in raw_items:
-        local = booking_repo.find_for_supplier_item(agent_id, raw)
+        local = await sync_to_async(
+            booking_service.find_local_for_supplier_item, thread_sensitive=True
+        )(agent_id, raw)
         items.append(BookingListItem(**parse(raw, local=local)))
 
     return BookingListResponse(bookings=items, total=count)

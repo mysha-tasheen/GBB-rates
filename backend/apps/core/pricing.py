@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 
-
 @dataclass(frozen=True)
 class PricingBreakdown:
-    """Internal pricing — never expose commission fields to agents."""
+    
 
     supplier_price: float
     commission_percent: float
@@ -32,11 +31,7 @@ def apply_agent_commission_to_min_rates(
 
 
 def apply_agent_commission(internal: dict, commission: float | None) -> dict:
-    """
-    Add optional agent commission on top of middleware price (per rate).
-
-    Example: middleware $1030 + agent commission $50 → agent sees $1080.
-    """
+    
     extra = round(commission or 0, 2)
 
     for room in internal.get("rooms", []):
@@ -50,11 +45,7 @@ def apply_agent_commission(internal: dict, commission: float | None) -> dict:
 
 
 def calculate_agent_price(supplier_price: float, commission_percent: float) -> PricingBreakdown:
-    """
-    Apply B2B markup: agent_price = supplier_price + (supplier_price × commission%).
 
-    Example: $1000 supplier @ 3% → $30 commission → $1030 agent price.
-    """
     commission_amount = round(supplier_price * (commission_percent / 100), 2)
     agent_price = round(supplier_price + commission_amount, 2)
     return PricingBreakdown(
