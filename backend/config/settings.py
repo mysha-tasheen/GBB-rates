@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "apps.agents.apps.AgentsConfig",
     "apps.api.apps.ApiConfig",
+    "apps.core.apps.CoreConfig",
 ]
 
 MIDDLEWARE = [
@@ -83,3 +84,10 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+NUITEE_API_URL = os.environ.get("NUITEE_API_URL", "https://api.liteapi.travel/v3.0")
+NUITEE_BOOK_API_URL = os.environ.get("NUITEE_BOOK_API_URL", "https://book.liteapi.travel/v3.0")
+NUITEE_API_KEY = os.environ.get("NUITEE_API_KEY", "")
+NUITEE_DEFAULT_CURRENCY = os.environ.get("NUITEE_DEFAULT_CURRENCY", "USD")
+NUITEE_GUEST_NATIONALITY = os.environ.get("NUITEE_GUEST_NATIONALITY", "US")
+NUITEE_COMMISSION_PERCENT = float(os.environ.get("NUITEE_COMMISSION_PERCENT", "10"))

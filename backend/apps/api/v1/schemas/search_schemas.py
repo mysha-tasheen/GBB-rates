@@ -1,26 +1,102 @@
 from pydantic import BaseModel, Field
 from datetime import date
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
+from django.conf import settings
 
-# ========== REQUEST SCHEMAS ==========
-class HotelRatesRequest(BaseModel):
-    hotel_id: str = Field(..., description="Hotel identifier (e.g., lp1897)")
+
+class Country(BaseModel):
+    code: str = Field(..., description="ISO-2 country code (e.g. US, GB)")
+    name: str = Field(..., description="Country name")
+
+
+class CountriesResponse(BaseModel):
+    countries: List[Country]
+    total: int
+
+
+class HotelSummary(BaseModel):
+    hotel_id: str = Field(..., description="Use this ID on POST /hotel-rates")
+    name: str
+    city: str
+    country_code: str
+    address: str
+    rating: float = Field(..., description="Star rating")
+    main_photo: str = ""
+
+
+class HotelListResponse(BaseModel):
+    country_code: str
+    city_name: Optional[str] = None
+    hotels: List[HotelSummary]
+    total: int
+    offset: int
+    limit: int
+
+
+class HotelMinRatesRequest(BaseModel):
+    hotel_ids: List[str] = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Hotel IDs from GET /hotels (max 200)",
+    )
     check_in: date = Field(..., description="Check-in date YYYY-MM-DD")
     check_out: date = Field(..., description="Check-out date YYYY-MM-DD")
     guests: int = Field(2, ge=1, le=10, description="Number of adults")
-    currency: str = Field("USD", description="Currency code")
+    currency: str = Field("USD", description="Currency code (ISO 4217)")
+    guest_nationality: str = Field(
+        default_factory=lambda: settings.NUITEE_GUEST_NATIONALITY,
+        min_length=2,
+        max_length=2,
+        description="ISO-2 from GET /countries",
+    )
+    commission: float = Field(
+        0,
+        ge=0,
+        description="Flat amount added to each min price (0 = no extra markup)",
+    )
 
-# ========== ESSENTIAL RESPONSE FIELDS (What agents need) ==========
+
+class HotelMinRate(BaseModel):
+    hotel_id: str
+    price: float = Field(..., description="Minimum price (markup included)")
+    offer_id: str = Field(..., description="Use for prebook / full rates flow")
+
+
+class HotelMinRatesResponse(BaseModel):
+    check_in: str
+    check_out: str
+    currency: str
+    rates: List[HotelMinRate]
+    total: int
+
+
+class HotelRatesRequest(BaseModel):
+    hotel_id: str = Field(..., description="From GET /hotels (e.g. lp1897)")
+    check_in: date = Field(..., description="Check-in date YYYY-MM-DD")
+    check_out: date = Field(..., description="Check-out date YYYY-MM-DD")
+    guests: int = Field(2, ge=1, le=10, description="Number of adults")
+    currency: str = Field("USD", description="Currency code (ISO 4217)")
+    guest_nationality: str = Field(
+        default_factory=lambda: settings.NUITEE_GUEST_NATIONALITY,
+        min_length=2,
+        max_length=2,
+        description="ISO-2 from GET /countries (e.g. US, GB)",
+    )
+    commission: float = Field(
+        0,
+        ge=0,
+        description="Flat amount added to each rate price (0 = no extra markup)",
+    )
+
 class RateEssential(BaseModel):
-    """Essential rate information for booking"""
+    """Agent-facing rate — only the total price (markup included)."""
+
     rate_id: str
     room_name: str
     board_type: str
     board_name: str
-    supplier_price: float  # Original price from supplier
-    commission_percent: float
-    commission_amount: float
-    final_price: float  # Price after commission
+    price: float = Field(..., description="Total price for the agent (markup included)")
     currency: str
     cancellation_deadline: Optional[str] = None
     refundable: bool = True

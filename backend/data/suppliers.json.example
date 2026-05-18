@@ -1,0 +1,13 @@
+{
+  "suppliers": [
+    {
+      "name": "liteapi",
+      "is_active": true,
+      "commission_percent": 10,
+      "credentials": {
+        "api_key": "YOUR_LITEAPI_KEY",
+        "base_url": "https://api.liteapi.travel/v3.0"
+      }
+    }
+  ]
+}

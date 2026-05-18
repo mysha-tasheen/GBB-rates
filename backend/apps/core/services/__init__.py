@@ -1,8 +1,5 @@
-from .base import BaseAdapter
-from .liteapi import LiteAPIAdapter
-from .registry import registry
+from apps.core.services.booking_service import BookingService
+from apps.core.services.catalog_service import CatalogService
+from apps.core.services.search_service import SearchService
 
-# Register LiteAPI adapter
-registry.register("liteapi", LiteAPIAdapter)
-
-__all__ = ['BaseAdapter', 'LiteAPIAdapter', 'registry']
+__all__ = ["BookingService", "CatalogService", "SearchService"]
