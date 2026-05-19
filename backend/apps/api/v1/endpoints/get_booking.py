@@ -1,11 +1,9 @@
 import logging
-
 import httpx
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from ninja import Router
 from ninja.errors import HttpError
-
 from apps.api.auth import api_key_auth
 from apps.api.v1.endpoints.bookings_common import (
     booking_service,

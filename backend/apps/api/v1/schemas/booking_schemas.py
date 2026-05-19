@@ -111,7 +111,6 @@ class ConfirmBookingRequest(BaseModel):
             raise ValueError("Either booking_id or prebook_id is required")
         return self
 
-
 class ConfirmBookingResponse(BaseModel):
     booking_id: str = Field(..., description="GBB booking reference (UUID)")
     booking_reference: str = Field(

@@ -1,5 +1,4 @@
 from ninja import Query, Router
-
 from apps.api.auth import api_key_auth
 from apps.api.v1.endpoints.search_common import (
     catalog_service,
@@ -40,7 +39,7 @@ async def list_countries(request):
 
 @router.get("/currencies", response=CurrenciesResponse, auth=api_key_auth)
 async def list_currencies(request):
-    """Wholesaler reference: ISO codes and names for currency selection (e.g. FJD for Fiji)."""
+    
     try:
         currencies = await catalog_service.list_currencies()
     except Exception as exc:

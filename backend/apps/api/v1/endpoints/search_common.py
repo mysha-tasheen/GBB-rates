@@ -1,7 +1,5 @@
 import logging
-
 from ninja.errors import HttpError
-
 from apps.api.lazy import LazyService
 from apps.core.wiring import (
     build_catalog_service,

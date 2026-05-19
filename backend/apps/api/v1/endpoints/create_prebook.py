@@ -1,6 +1,5 @@
 import logging
 import urllib.error
-
 from asgiref.sync import sync_to_async
 from apps.core.exceptions import SupplierAPIError
 from django.conf import settings

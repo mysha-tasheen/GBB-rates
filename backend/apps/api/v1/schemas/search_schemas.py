@@ -1,15 +1,13 @@
 from datetime import date
 from typing import List, Optional
-
 from django.conf import settings
 from pydantic import BaseModel, Field
-
 from apps.api.v1.schemas.currency_codes import WholesalerCurrency
 
 _CURRENCY_FIELD = Field(
-    default=WholesalerCurrency.USD,
+    default_factory=lambda: WholesalerCurrency(settings.NUITEE_DEFAULT_CURRENCY),
     description=(
-        "Wholesaler pricing currency (e.g. FJD for Fiji). "
+        "Wholesaler pricing currency (default from NUITEE_DEFAULT_CURRENCY, e.g. AUD). "
         "Selectable in API docs; full list with country names: GET /currencies"
     ),
 )
@@ -67,7 +65,7 @@ class HotelMinRatesRequest(BaseModel):
     )
     check_in: date = Field(..., description="Check-in date YYYY-MM-DD")
     check_out: date = Field(..., description="Check-out date YYYY-MM-DD")
-    guests: int = Field(2, ge=1, le=10, description="Number of adults")
+    guests: int = Field(2, ge=1, le=10)
     currency: WholesalerCurrency = _CURRENCY_FIELD
     guest_nationality: str = Field(
         default_factory=lambda: settings.NUITEE_GUEST_NATIONALITY,
@@ -84,11 +82,8 @@ class HotelMinRatesRequest(BaseModel):
 
 class HotelMinRate(BaseModel):
     hotel_id: str
-    price: float = Field(..., description="Minimum price (markup included)")
-    offer_id: str = Field(
-        ...,
-        description="Pass to POST /bookings/prebook (from a fresh rates search)",
-    )
+    price: float = Field(...)
+    offer_id: str = Field(...)
 
 
 class HotelMinRatesResponse(BaseModel):
@@ -100,10 +95,10 @@ class HotelMinRatesResponse(BaseModel):
 
 
 class HotelRatesRequest(BaseModel):
-    hotel_id: str = Field(..., description="From GET /hotels (e.g. lp1897)")
-    check_in: date = Field(..., description="Check-in date YYYY-MM-DD")
-    check_out: date = Field(..., description="Check-out date YYYY-MM-DD")
-    guests: int = Field(2, ge=1, le=10, description="Number of adults")
+    hotel_id: str = Field(...)
+    check_in: date = Field(...)
+    check_out: date = Field(...)
+    guests: int = Field(2, ge=1, le=10)
     currency: WholesalerCurrency = _CURRENCY_FIELD
     guest_nationality: str = Field(
         default_factory=lambda: settings.NUITEE_GUEST_NATIONALITY,
@@ -123,7 +118,7 @@ class RateEssential(BaseModel):
     room_name: str = Field(..., description="Room name (e.g. Standard King Room)")
     board_type: str
     board_name: str
-    price: float = Field(..., description="Total price for the agent (markup included)")
+    price: float = Field(...)
     currency: str
     cancellation_deadline: Optional[str] = None
     refundable: bool = True
@@ -131,14 +126,8 @@ class RateEssential(BaseModel):
 
 class RoomTypeEssential(BaseModel):
     room_type_id: str
-    offer_id: str = Field(
-        ...,
-        description="Pass to POST /bookings/prebook (not rate_id)",
-    )
-    room_name: str = Field(
-        ...,
-        description="Primary room name for this offer (from supplier rate data)",
-    )
+    offer_id: str = Field(...)
+    room_name: str = Field(...)
     rates: List[RateEssential]
 
 
