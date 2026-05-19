@@ -7,5 +7,5 @@ T = TypeVar("T")
 
 
 async def run_sync(callable: Callable[..., T], /, *args, **kwargs) -> T:
-    "
+    
     return await sync_to_async(callable, thread_sensitive=False)(*args, **kwargs)

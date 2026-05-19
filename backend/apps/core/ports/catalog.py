@@ -3,8 +3,7 @@ from typing import Any, Protocol
 
 
 class CatalogSupplierPort(Protocol):
-    """Outbound port — countries and hotel catalog."""
-
+    
     async def get_countries(self) -> list[dict[str, str]]: ...
 
     async def get_currencies(self) -> list[dict[str, Any]]: ...

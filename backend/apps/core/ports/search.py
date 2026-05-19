@@ -3,7 +3,7 @@ from typing import Any, Protocol
 
 
 class SearchSupplierPort(Protocol):
-    """Outbound port — hotel rates and min-rates."""
+    
 
     async def get_hotel_rates(
         self,

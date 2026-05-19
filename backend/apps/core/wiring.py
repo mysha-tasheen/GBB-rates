@@ -18,16 +18,15 @@ logger = logging.getLogger(__name__)
 _supplier_repo = SupplierRepository()
 _commission_service = CommissionService(_supplier_repo)
 
-
 def build_commission_service() -> CommissionService:
     return _commission_service
 
-
 def _config_path() -> Path:
+    
     return Path(__file__).resolve().parent.parent.parent / "data" / "suppliers.json"
 
-
 def _load_adapters_from_json() -> Dict[str, BaseAdapter]:
+    
     path = _config_path()
     if not path.exists():
         return {}
@@ -52,8 +51,8 @@ def _load_adapters_from_json() -> Dict[str, BaseAdapter]:
 
     return adapters
 
-
 def _load_adapters_from_env() -> Dict[str, BaseAdapter]:
+    
     cfg = get_nuitee_config()
     if not cfg.api_key:
         logger.error(
@@ -74,16 +73,16 @@ def _load_adapters_from_env() -> Dict[str, BaseAdapter]:
         logger.error("Failed to load liteapi from env: %s", e)
         return {}
 
-
 def build_search_service() -> SearchService:
+    
     adapters = _load_adapters_from_json()
     if not adapters:
         logger.warning("Supplier config missing or empty, using env defaults")
         adapters = _load_adapters_from_env()
     return SearchService(adapters)
 
-
 def build_catalog_service() -> CatalogService:
+    
     cfg = get_nuitee_config()
     if not cfg.api_key:
         raise ValueError("NUITEE_API_KEY is not configured")
@@ -94,9 +93,8 @@ def build_catalog_service() -> CatalogService:
     )
     return CatalogService(adapter)
 
-
 def warm_services() -> None:
-    """Eager-load supplier adapters at startup (sync context — safe for ORM)."""
+    
     from apps.api.v1.endpoints.bookings_common import booking_service
     from apps.api.v1.endpoints.search_common import search_service
 
@@ -109,8 +107,8 @@ def warm_services() -> None:
     except Exception as exc:
         logger.warning("Booking service not warmed: %s", exc)
 
-
 def build_booking_service() -> BookingService:
+
     cfg = get_nuitee_config()
     if not cfg.api_key:
         raise ValueError("NUITEE_API_KEY is not configured")

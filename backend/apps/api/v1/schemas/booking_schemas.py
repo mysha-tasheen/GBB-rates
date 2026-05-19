@@ -10,8 +10,11 @@ class PrebookRequest(BaseModel):
         description="offer_id from hotel-rates or hotel-min-rates (not rate_id; search must be fresh)",
     )
     use_payment_sdk: bool = Field(
-        False,
-        description="Set true only if using LiteAPI payment SDK on the client",
+        True,
+        description=(
+            "Use LiteAPI payment SDK flow when true (returns transaction_id / secret_key). "
+            "Set false for standard sandbox/production prebook without the SDK."
+        ),
     )
     commission: float = Field(
         0,
@@ -112,7 +115,8 @@ class ConfirmBookingRequest(BaseModel):
 class ConfirmBookingResponse(BaseModel):
     booking_id: str = Field(..., description="GBB booking reference (UUID)")
     booking_reference: str = Field(
-        ..., description="Confirmed booking reference for GET/PUT /bookings/{reference}"
+        ...,
+        description="Confirmed booking reference for GET /bookings/{reference} and PUT /bookings/{reference}/cancel",
     )
     status: str
     hotel_id: str
@@ -132,7 +136,8 @@ class BookingListItem(BaseModel):
         None, description="GBB booking UUID when matched to a local record"
     )
     booking_reference: str = Field(
-        ..., description="Booking reference for GET/PUT /bookings/{reference}"
+        ...,
+        description="Booking reference for GET /bookings/{reference} (and cancel/amend sub-paths)",
     )
     client_reference: str = ""
     prebook_id: str = ""
@@ -258,7 +263,8 @@ class BookingDetailResponse(BaseModel):
         None, description="GBB booking UUID when matched to a local record"
     )
     booking_reference: str = Field(
-        ..., description="Booking reference for GET/PUT /bookings/{reference}"
+        ...,
+        description="Booking reference for GET /bookings/{reference} (and cancel/amend sub-paths)",
     )
     client_reference: str = ""
     prebook_id: str = ""

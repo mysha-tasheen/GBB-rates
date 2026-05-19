@@ -1,3 +1,4 @@
+import logging
 from typing import Optional, Tuple
 
 from asgiref.sync import sync_to_async
@@ -7,6 +8,8 @@ from django.utils import timezone
 from ninja.security import APIKeyHeader
 
 from apps.agents.models import Agent, AgentApiKey
+
+logger = logging.getLogger(__name__)
 
 
 class AgentApiKeyAuth(APIKeyHeader):
@@ -52,25 +55,49 @@ class AgentApiKeyAuth(APIKeyHeader):
 
 class AgentLoginAuth:
     @staticmethod
-    def authenticate(email: str, password: str, request=None) -> Optional[dict]:
-        user = authenticate(request, username=email, password=password)
+    def _resolve_user(email: str, password: str, request=None) -> Optional[User]:
+        email = (email or "").strip()
+        if not email or not password:
+            return None
 
-        if not user:
+        candidates: list[User] = []
+        try:
+            candidates.append(User.objects.get(email__iexact=email))
+        except User.DoesNotExist:
+            pass
+
+        if not candidates:
             try:
-                user_obj = User.objects.get(email=email)
-                user = authenticate(request, username=user_obj.username, password=password)
+                candidates.append(User.objects.get(username=email))
             except User.DoesNotExist:
                 return None
 
+        for user_obj in candidates:
+            user = authenticate(
+                request, username=user_obj.username, password=password
+            )
+            if user:
+                return user
+            if user_obj.check_password(password) and user_obj.is_active:
+                return user_obj
+
+        return None
+
+    @staticmethod
+    def authenticate(email: str, password: str, request=None) -> Optional[dict]:
+        user = AgentLoginAuth._resolve_user(email, password, request)
         if not user:
+            logger.info("Login failed for email=%s", (email or "").strip())
             return None
 
         try:
             agent = user.agent
         except Agent.DoesNotExist:
+            logger.warning("Login user has no agent profile: %s", user.email)
             return None
 
         if not agent.is_active:
+            logger.warning("Login agent inactive: %s", user.email)
             return None
 
         api_key_obj = AgentApiKey.objects.filter(

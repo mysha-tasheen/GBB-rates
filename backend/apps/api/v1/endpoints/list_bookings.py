@@ -65,6 +65,7 @@ async def list_bookings(
         local = await sync_to_async(
             booking_service.find_local_for_supplier_item, thread_sensitive=True
         )(agent_id, raw)
-        items.append(BookingListItem(**parse(raw, local=local)))
+        parsed = await sync_to_async(parse, thread_sensitive=True)(raw, local=local)
+        items.append(BookingListItem(**parsed))
 
     return BookingListResponse(bookings=items, total=count)

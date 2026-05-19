@@ -38,24 +38,27 @@ def map_hotel_rates_for_agent(internal: dict, total_offers: int) -> SearchRespon
         rates = [
             RateEssential(
                 rate_id=rate["rate_id"],
-                room_name=rate["room_name"],
+                room_name=rate.get("room_name") or "",
                 board_type=rate["board_type"],
                 board_name=rate["board_name"],
                 price=rate["_agent_price"],
                 currency=rate["currency"],
                 cancellation_deadline=rate.get("cancellation_deadline"),
                 refundable=rate.get("refundable", True),
-                payment_types=rate.get("payment_types", []),
             )
             for rate in room.get("rates", [])
             if rate.get("_agent_price", 0) > 0
         ]
         if not rates:
             continue
+        room_name = room.get("room_name") or next(
+            (r.room_name for r in rates if r.room_name), ""
+        )
         rooms.append(
             RoomTypeEssential(
                 room_type_id=room["room_type_id"],
                 offer_id=room["offer_id"],
+                room_name=room_name,
                 rates=rates,
             )
         )

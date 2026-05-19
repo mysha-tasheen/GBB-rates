@@ -120,14 +120,13 @@ class HotelRatesRequest(BaseModel):
 
 class RateEssential(BaseModel):
     rate_id: str
-    room_name: str
+    room_name: str = Field(..., description="Room name (e.g. Standard King Room)")
     board_type: str
     board_name: str
     price: float = Field(..., description="Total price for the agent (markup included)")
     currency: str
     cancellation_deadline: Optional[str] = None
     refundable: bool = True
-    payment_types: List[str] = []
 
 
 class RoomTypeEssential(BaseModel):
@@ -135,6 +134,10 @@ class RoomTypeEssential(BaseModel):
     offer_id: str = Field(
         ...,
         description="Pass to POST /bookings/prebook (not rate_id)",
+    )
+    room_name: str = Field(
+        ...,
+        description="Primary room name for this offer (from supplier rate data)",
     )
     rates: List[RateEssential]
 

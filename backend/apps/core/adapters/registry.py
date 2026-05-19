@@ -1,5 +1,4 @@
 from typing import Any, Dict, Type
-
 from apps.core.adapters.base import BaseAdapter
 
 

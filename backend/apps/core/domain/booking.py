@@ -11,7 +11,7 @@ class BookingStatus(str, Enum):
 
 @dataclass(frozen=True)
 class Booking:
-    """Local GBB booking record (pure Python — no Django)."""
+    
 
     id: str
     prebook_id: str

@@ -1,5 +1,6 @@
 import pytest
-from tests.helpers import API_PREFIX, api_get, assert_ok
+
+from tests.support import API_PREFIX, api_get, assert_ok
 
 pytestmark = [pytest.mark.django_db(transaction=True)]
 
@@ -7,9 +8,7 @@ pytestmark = [pytest.mark.django_db(transaction=True)]
 @pytest.mark.asyncio
 async def test_me_authenticated(api_client, auth_headers, test_agent):
     agent, api_key = test_agent
-    response = await api_get(
-        api_client, f"{API_PREFIX}/me", headers=auth_headers
-    )
+    response = await api_get(api_client, f"{API_PREFIX}/me", headers=auth_headers)
     assert_ok(response, 200)
     data = response.json()
     assert data["agent_id"] == str(agent.id)

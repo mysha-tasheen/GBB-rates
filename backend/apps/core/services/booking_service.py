@@ -282,7 +282,7 @@ class BookingService:
         payment_status=None,
         timeout=None,
     ):
-        import urllib.error
+        from apps.core.exceptions import SupplierAPIError
 
         try:
             return await run_sync(
@@ -295,8 +295,8 @@ class BookingService:
                 payment_status=payment_status,
                 timeout=timeout,
             )
-        except urllib.error.HTTPError as exc:
-            if exc.code == 400:
+        except SupplierAPIError as exc:
+            if exc.status_code == 400:
                 return 0, []
             raise
 

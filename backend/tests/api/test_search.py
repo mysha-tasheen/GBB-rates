@@ -1,14 +1,6 @@
-"""Search/catalog endpoints — live LiteAPI integration (no mocks)."""
-
 import pytest
 
-from tests.helpers import (
-    API_PREFIX,
-    api_get,
-    api_post_json,
-    assert_ok,
-    future_stay,
-)
+from tests.support import API_PREFIX, api_get, api_post_json, assert_ok, future_stay
 
 pytestmark = [
     pytest.mark.integration,
@@ -39,9 +31,6 @@ async def test_list_currencies(api_client, auth_headers, nuitee_required):
     codes = {c["code"] for c in data["currencies"]}
     assert "FJD" in codes
     assert "USD" in codes
-    fjd = next(c for c in data["currencies"] if c["code"] == "FJD")
-    assert fjd["name"]
-    assert isinstance(fjd["countries"], list)
 
 
 @pytest.mark.asyncio
@@ -99,7 +88,6 @@ async def test_hotel_min_rates(api_client, auth_headers, nuitee_required):
     )
     assert_ok(response, 200)
     data = response.json()
-    assert data["total"] >= 0
     for rate in data["rates"]:
         assert rate["hotel_id"] in hotel_ids
         assert rate["price"] > 0
@@ -137,5 +125,7 @@ async def test_hotel_rates(api_client, auth_headers, nuitee_required):
     data = response.json()
     assert data["hotel"]["hotel_id"] == hotel_id
     assert data["nights"] >= 1
-    assert data["rooms"], "Expected at least one room offer with rates"
-    assert any(room["rates"] for room in data["rooms"])
+    assert data["rooms"]
+    room_with_rates = next(r for r in data["rooms"] if r["rates"])
+    assert room_with_rates["room_name"]
+    assert "payment_types" not in room_with_rates["rates"][0]

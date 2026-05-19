@@ -16,7 +16,11 @@ from apps.api.v1.schemas.booking_schemas import CancelBookingResponse
 router = Router(tags=["bookings"])
 
 
-@router.put("/bookings/{reference}", response=CancelBookingResponse, auth=api_key_auth)
+@router.put(
+    "/bookings/{reference}/cancel",
+    response=CancelBookingResponse,
+    auth=api_key_auth,
+)
 async def cancel_booking(
     request,
     reference: str,

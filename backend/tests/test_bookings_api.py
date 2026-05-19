@@ -1,5 +1,3 @@
-"""Booking endpoints — live LiteAPI + real DB (no mocks)."""
-
 import pytest
 
 from tests.helpers import (
@@ -191,7 +189,7 @@ async def test_confirm_get_cancel_booking(api_client, auth_headers, booking_flow
     assert detail.json()["booking_reference"] == reference
 
     cancel = await api_client.put(
-        f"{API_PREFIX}/bookings/{reference}",
+        f"{API_PREFIX}/bookings/{reference}/cancel",
         headers=auth_headers,
     )
     assert_ok(cancel, 200)

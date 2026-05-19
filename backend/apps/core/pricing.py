@@ -3,8 +3,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class PricingBreakdown:
     
-
-    supplier_price: float
+ supplier_price: float
     commission_percent: float
     commission_amount: float
     agent_price: float
@@ -20,7 +19,7 @@ class PricingBreakdown:
 def apply_agent_commission_to_min_rates(
     rates: list[dict], commission: float | None
 ) -> list[dict]:
-    """Add optional agent commission to each hotel min-rate."""
+    
     extra = round(commission or 0, 2)
     for rate in rates:
         middleware_price = rate.get("_agent_price", 0)

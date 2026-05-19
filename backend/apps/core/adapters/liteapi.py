@@ -8,7 +8,7 @@ from apps.core.exceptions import SupplierAPIError
 
 
 def _path_segment(value: str) -> str:
-    """URL-encode supplier IDs (base64 prebook/booking ids may contain +, /, =)."""
+    
     return urllib.parse.quote(value, safe="")
 
 
@@ -293,6 +293,7 @@ class LiteAPIAdapter(BaseAdapter):
                     rooms_by_offer[room_key] = {
                         "room_type_id": room_type.get("roomTypeId", ""),
                         "offer_id": offer_id,
+                        "room_name": "",
                         "rates": [],
                     }
 
@@ -312,16 +313,19 @@ class LiteAPIAdapter(BaseAdapter):
                     )
                     refundable = cancel_policies.get("refundableTag") == "RFN"
 
+                    rate_room_name = rate.get("name") or ""
+                    if rate_room_name and not rooms_by_offer[room_key]["room_name"]:
+                        rooms_by_offer[room_key]["room_name"] = rate_room_name
+
                     rooms_by_offer[room_key]["rates"].append(
                         {
                             "rate_id": rate.get("rateId", ""),
-                            "room_name": rate.get("name", ""),
+                            "room_name": rate_room_name,
                             "board_type": rate.get("boardType", ""),
                             "board_name": rate.get("boardName", ""),
                             "currency": rate_currency,
                             "cancellation_deadline": cancellation_deadline,
                             "refundable": refundable,
-                            "payment_types": rate.get("paymentTypes", []),
                             "_supplier_price": pricing.supplier_price,
                             "_commission_percent": pricing.commission_percent,
                             "_commission_amount": pricing.commission_amount,
@@ -345,10 +349,10 @@ class LiteAPIAdapter(BaseAdapter):
         return [result]
     
     def get_minimum_rate(self, hotel_id, check_in, check_out, guests):
-        """Get cheapest rate"""
+        
         result = self.search_hotel_rates(hotel_id, check_in, check_out, guests)
         
-        # Find the cheapest rate across all rooms
+        
         all_rates = []
         for room in result.get("rooms", []):
             for rate in room.get("rates", []):
@@ -395,7 +399,7 @@ class LiteAPIAdapter(BaseAdapter):
         return response.get("data", {})
 
     def get_prebook(self, prebook_id, include_credit_balance=False):
-        """GET /prebooks/{prebookId} — retrieve an existing prebook session."""
+        
         params = {}
         if include_credit_balance:
             params["includeCreditBalance"] = True
@@ -407,7 +411,7 @@ class LiteAPIAdapter(BaseAdapter):
         return response.get("data", {})
 
     def get_booking(self, booking_id):
-        """GET /bookings/{bookingId} — retrieve a single booking."""
+        
         response = self._book_get(f"/bookings/{_path_segment(booking_id)}")
         return response.get("data", {})
 
@@ -437,7 +441,7 @@ class LiteAPIAdapter(BaseAdapter):
         payment_status=None,
         timeout=None,
     ):
-        """GET /bookings — all bookings for the API key with optional filters."""
+        
         params = {}
         if start_date:
             params["startDate"] = start_date
@@ -454,7 +458,8 @@ class LiteAPIAdapter(BaseAdapter):
         if timeout is not None:
             params["timeout"] = timeout
 
-        response = self._book_get("/bookings", params=params or None)
+        
+        response = self._book_get("/bookings/", params=params or None)
         data = response.get("data", [])
         return response.get("count", len(data)), data
 

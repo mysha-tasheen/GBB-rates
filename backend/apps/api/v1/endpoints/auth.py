@@ -22,7 +22,11 @@ class LoginResponse(BaseModel):
 
 @router.post("/auth/login", auth=None, response={200: LoginResponse, 401: dict})
 def login(request, payload: LoginRequest):
-    result = AgentLoginAuth.authenticate(payload.email, payload.password, request)
+    result = AgentLoginAuth.authenticate(
+        payload.email.strip(),
+        payload.password,
+        request,
+    )
     if not result:
         return 401, {"detail": "Invalid credentials"}
     return result

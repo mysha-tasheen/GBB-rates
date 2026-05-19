@@ -2,7 +2,7 @@ from typing import Any, Protocol
 
 
 class BookingSupplierPort(Protocol):
-    """Outbound port — supplier booking API (implemented by LiteAPIAdapter)."""
+    
 
     async def create_prebook(
         self,

@@ -1,9 +1,7 @@
 import os
-
 import pytest
 from django.contrib.auth.models import User
 from django.test import AsyncClient
-
 from apps.agents.models import Agent, AgentApiKey
 from apps.core.models import Supplier
 
