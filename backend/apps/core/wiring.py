@@ -95,6 +95,21 @@ def build_catalog_service() -> CatalogService:
     return CatalogService(adapter)
 
 
+def warm_services() -> None:
+    """Eager-load supplier adapters at startup (sync context — safe for ORM)."""
+    from apps.api.v1.endpoints.bookings_common import booking_service
+    from apps.api.v1.endpoints.search_common import search_service
+
+    try:
+        search_service._get()
+    except Exception as exc:
+        logger.warning("Search service not warmed: %s", exc)
+    try:
+        booking_service._get()
+    except Exception as exc:
+        logger.warning("Booking service not warmed: %s", exc)
+
+
 def build_booking_service() -> BookingService:
     cfg = get_nuitee_config()
     if not cfg.api_key:

@@ -1,13 +1,20 @@
-import urllib.request
-import urllib.parse
 import json
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import date
 
-# Dummy placeholders replacing async/await, httpx, and logging for pure Python.
-# In a true synchronous/pure Python context, we would use urllib for HTTP, and remove all async/await usage.
+from apps.core.exceptions import SupplierAPIError
+
+
+def _path_segment(value: str) -> str:
+    """URL-encode supplier IDs (base64 prebook/booking ids may contain +, /, =)."""
+    return urllib.parse.quote(value, safe="")
+
+
 
 def calculate_agent_price(supplier_price, commission_percent):
-    # Dummy placeholder since original is imported
+
     class Pricing:
         def __init__(self, sp, cp):
             self.supplier_price = sp
@@ -16,16 +23,31 @@ def calculate_agent_price(supplier_price, commission_percent):
             self.agent_price = sp + self.commission_amount
     return Pricing(supplier_price, commission_percent)
 
+
+def _raise_http_error(exc: urllib.error.HTTPError) -> None:
+    raw = exc.read().decode(errors="replace") if exc.fp else ""
+    try:
+        body = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        body = {}
+    if isinstance(body.get("error"), dict):
+        message = body["error"].get("message") or body.get("message")
+    else:
+        message = body.get("message") or (
+            body.get("error") if isinstance(body.get("error"), str) else None
+        )
+    if not message:
+        message = raw[:500] if raw else exc.reason
+    raise SupplierAPIError(exc.code, str(message), body if isinstance(body, dict) else {}) from exc
+
+
 class BaseAdapter:
     def __init__(self, credentials, commission_percent):
         self.credentials = credentials
         self.commission_percent = commission_percent
 
 class LiteAPIAdapter(BaseAdapter):
-    """
-    Adapter for LiteAPI Travel (https://api.liteapi.travel)
-    Note: This is a pure Python synchronous version.
-    """
+    
     
     def __init__(self, credentials, commission_percent):
         super().__init__(credentials, commission_percent)
@@ -47,51 +69,79 @@ class LiteAPIAdapter(BaseAdapter):
         if params:
             url += '?' + urllib.parse.urlencode(params)
         req = urllib.request.Request(url, headers=self._headers())
-        with urllib.request.urlopen(req, timeout=30) as response:
-            return json.loads(response.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                return json.loads(response.read().decode())
+        except urllib.error.HTTPError as exc:
+            _raise_http_error(exc)
 
     def _request(self, endpoint, data):
         url = self.base_url + endpoint
         req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=self._headers())
         req.method = "POST"
-        with urllib.request.urlopen(req, timeout=30) as response:
-            return json.loads(response.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                return json.loads(response.read().decode())
+        except urllib.error.HTTPError as exc:
+            _raise_http_error(exc)
 
     def _book_request(self, endpoint, data):
         url = self.book_base_url + endpoint
         req = urllib.request.Request(url, data=json.dumps(data).encode(), headers=self._headers())
         req.method = "POST"
-        with urllib.request.urlopen(req, timeout=60) as response:
-            return json.loads(response.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                return json.loads(response.read().decode())
+        except urllib.error.HTTPError as exc:
+            _raise_http_error(exc)
 
     def _book_get(self, endpoint, params=None):
         url = self.book_base_url + endpoint
         if params:
-            url += '?' + urllib.parse.urlencode(params)
+            url += "?" + urllib.parse.urlencode(params)
         req = urllib.request.Request(url, headers=self._headers())
-        with urllib.request.urlopen(req, timeout=30) as response:
-            return json.loads(response.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                return json.loads(response.read().decode())
+        except urllib.error.HTTPError as exc:
+            _raise_http_error(exc)
 
     def _book_put(self, endpoint, params=None, data=None):
         url = self.book_base_url + endpoint
         if params:
-            url += '?' + urllib.parse.urlencode(params)
+            url += "?" + urllib.parse.urlencode(params)
         req = urllib.request.Request(url, headers=self._headers())
         req.method = "PUT"
         if data:
             req.data = json.dumps(data).encode()
-        with urllib.request.urlopen(req, timeout=60) as response:
-            content = response.read()
-            if not content:
-                return {}
-            return json.loads(content.decode())
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                content = response.read()
+                if not content:
+                    return {}
+                return json.loads(content.decode())
+        except urllib.error.HTTPError as exc:
+            _raise_http_error(exc)
 
     def get_countries(self):
-        """GET /data/countries — ISO-2 codes and names."""
+        
         response = self._get("/data/countries")
         return [
             {"code": item["code"], "name": item["name"]}
             for item in response.get("data", [])
+        ]
+
+    def get_currencies(self):
+        """GET /data/currencies — reference list for wholesaler pricing / payment currency (UI)."""
+        response = self._get("/data/currencies")
+        return [
+            {
+                "code": item.get("code", ""),
+                "name": item.get("currency", ""),
+                "countries": list(item.get("countries") or []),
+            }
+            for item in response.get("data", [])
+            if item.get("code")
         ]
 
     def get_hotels(self, country_code, city_name=None, offset=0, limit=50):
@@ -120,30 +170,46 @@ class LiteAPIAdapter(BaseAdapter):
             )
         return hotels
 
+    @staticmethod
+    def _price_from_rate(rate):
+        
+        retail = rate.get("retailRate") or {}
+        for key in ("total", "suggestedSellingPrice", "initialPrice"):
+            entries = retail.get(key) or []
+            if isinstance(entries, dict):
+                entries = [entries]
+            if entries:
+                amount = entries[0].get("amount", 0)
+                if isinstance(amount, dict):
+                    amount = amount.get("amount", 0)
+                price = float(amount or 0)
+                if price > 0:
+                    currency = entries[0].get("currency", "USD")
+                    return price, currency
+        return 0.0, "USD"
+
     def search_hotel_rates(self, hotel_id, check_in, check_out, guests, currency="USD", guest_nationality="US"):
-        """
-        Search hotel rates from LiteAPI
-        POST /v3.0/hotels/rates
-        """
+        
         request_data = {
             "hotelIds": [hotel_id],
             "checkin": check_in.isoformat(),
             "checkout": check_out.isoformat(),
             "currency": currency,
             "guestNationality": guest_nationality.upper(),
-            "occupancies": [{"adults": guests}],
+            "occupancies": [{"rooms": 1, "adults": guests}],
             "includeHotelData": True,
+            "timeout": 12,
         }
         response = self._request("/hotels/rates", request_data)
 
         if not response.get("data"):
-            # no logging in pure python
+            
             pass
 
         return self._process_response(response, check_in, check_out, guests)
 
     def get_min_rates(self, hotel_ids, check_in, check_out, guests, currency="USD", guest_nationality="US"):
-        """POST /hotels/min-rates — cheapest rate per hotel (for listing pages)."""
+        
         if not hotel_ids:
             return []
 
@@ -153,7 +219,7 @@ class LiteAPIAdapter(BaseAdapter):
             "checkout": check_out.isoformat(),
             "currency": currency,
             "guestNationality": guest_nationality.upper(),
-            "occupancies": [{"adults": guests}],
+            "occupancies": [{"rooms": 1, "adults": guests}],
         }
 
         response = self._request("/hotels/min-rates", request_data)
@@ -185,71 +251,92 @@ class LiteAPIAdapter(BaseAdapter):
         hotels_meta = {
             h.get("id", ""): h for h in response.get("hotels", []) if h.get("id")
         }
+        for item in data_list:
+            embedded = item.get("hotel") or {}
+            hid = item.get("hotelId") or embedded.get("id")
+            if hid and hid not in hotels_meta and embedded:
+                hotels_meta[hid] = embedded
 
         first_hotel_rates = data_list[0] if data_list else {}
         hotel_id = first_hotel_rates.get("hotelId", "")
         hotel_meta = hotels_meta.get(hotel_id, {})
 
         processed = {
-            "supplier_name": "liteapi",
             "hotel": {
                 "hotel_id": hotel_id,
                 "name": hotel_meta.get("name", ""),
                 "address": hotel_meta.get("address", ""),
-                "rating": float(hotel_meta.get("rating") or 0),
-                "main_photo": hotel_meta.get("main_photo", ""),
+                "rating": float(
+                    hotel_meta.get("rating")
+                    or hotel_meta.get("stars")
+                    or hotel_meta.get("starRating")
+                    or 0
+                ),
+                "main_photo": hotel_meta.get("main_photo")
+                or hotel_meta.get("thumbnail")
+                or hotel_meta.get("mainPhoto")
+                or "",
             },
             "check_in": check_in.isoformat(),
             "check_out": check_out.isoformat(),
             "nights": nights,
-            "rooms": []
+            "rooms": [],
         }
+
+        rooms_by_offer: dict[str, dict] = {}
 
         for hotel_data_item in data_list:
             for room_type in hotel_data_item.get("roomTypes", []):
-                for rate in room_type.get("rates", []):
-                    # Get supplier price (from retailRate.total)
-                    retail_total = rate.get("retailRate", {}).get("total", [{}])[0]
-                    supplier_price = float(retail_total.get("amount", 0))
-                    pricing = calculate_agent_price(supplier_price, self.commission_percent)
+                offer_id = room_type.get("offerId", "")
+                room_key = offer_id or room_type.get("roomTypeId", "")
+                if room_key not in rooms_by_offer:
+                    rooms_by_offer[room_key] = {
+                        "room_type_id": room_type.get("roomTypeId", ""),
+                        "offer_id": offer_id,
+                        "rates": [],
+                    }
 
-                    # Get cancellation policy
+                for rate in room_type.get("rates", []):
+                    supplier_price, rate_currency = self._price_from_rate(rate)
+                    if supplier_price <= 0:
+                        continue
+
+                    pricing = calculate_agent_price(
+                        supplier_price, self.commission_percent
+                    )
+
                     cancel_policies = rate.get("cancellationPolicies", {})
                     cancel_infos = cancel_policies.get("cancelPolicyInfos", [])
-                    cancellation_deadline = cancel_infos[0].get("cancelTime") if cancel_infos else None
+                    cancellation_deadline = (
+                        cancel_infos[0].get("cancelTime") if cancel_infos else None
+                    )
                     refundable = cancel_policies.get("refundableTag") == "RFN"
-                    
-                    essential_rate = {
-                        "rate_id": rate.get("rateId", ""),
-                        "room_name": rate.get("name", ""),
-                        "board_type": rate.get("boardType", ""),
-                        "board_name": rate.get("boardName", ""),
-                        "currency": retail_total.get("currency", "USD"),
-                        "cancellation_deadline": cancellation_deadline,
-                        "refundable": refundable,
-                        "payment_types": rate.get("paymentTypes", []),
-                        # Internal — stripped before API response; used for bookings
-                        "_supplier_price": pricing.supplier_price,
-                        "_commission_percent": pricing.commission_percent,
-                        "_commission_amount": pricing.commission_amount,
-                        "_middleware_price": pricing.agent_price,
-                        "_agent_commission": 0.0,
-                        "_agent_price": pricing.agent_price,
-                    }
-                    
-                    # Build room type
-                    essential_room = {
-                        "room_type_id": room_type.get("roomTypeId", ""),
-                        "offer_id": room_type.get("offerId", ""),
-                        "supplier": room_type.get("supplier", "liteapi"),
-                        "rates": [essential_rate]
-                    }
-                    
-                    processed["rooms"].append(essential_room)
-        
+
+                    rooms_by_offer[room_key]["rates"].append(
+                        {
+                            "rate_id": rate.get("rateId", ""),
+                            "room_name": rate.get("name", ""),
+                            "board_type": rate.get("boardType", ""),
+                            "board_name": rate.get("boardName", ""),
+                            "currency": rate_currency,
+                            "cancellation_deadline": cancellation_deadline,
+                            "refundable": refundable,
+                            "payment_types": rate.get("paymentTypes", []),
+                            "_supplier_price": pricing.supplier_price,
+                            "_commission_percent": pricing.commission_percent,
+                            "_commission_amount": pricing.commission_amount,
+                            "_middleware_price": pricing.agent_price,
+                            "_agent_commission": 0.0,
+                            "_agent_price": pricing.agent_price,
+                        }
+                    )
+
+        processed["rooms"] = [
+            room for room in rooms_by_offer.values() if room["rates"]
+        ]
         return processed
     
-    # Required BaseAdapter methods
+    
     def get_hotel_rates(self, hotel_id, check_in, check_out, guests, currency="USD", guest_nationality="US"):
         """BaseAdapter interface method"""
         result = self.search_hotel_rates(
@@ -273,14 +360,16 @@ class LiteAPIAdapter(BaseAdapter):
         cheapest = min(all_rates, key=lambda x: x["_agent_price"])
         return cheapest
 
-    def create_prebook(self, offer_id, use_payment_sdk=False, voucher_code=None):
-        """POST /rates/prebook on book API — verify availability and lock pricing."""
+    def create_prebook(self, offer_id, use_payment_sdk=False):
+        
+        offer_id = (offer_id or "").strip()
+        if not offer_id:
+            raise ValueError("offer_id is required")
+
         payload = {
             "offerId": offer_id,
-            "usePaymentSdk": use_payment_sdk,
+            "usePaymentSdk": bool(use_payment_sdk),
         }
-        if voucher_code:
-            payload["voucherCode"] = voucher_code
 
         response = self._book_request("/rates/prebook", payload)
         return response.get("data", {})
@@ -312,14 +401,14 @@ class LiteAPIAdapter(BaseAdapter):
             params["includeCreditBalance"] = True
 
         response = self._book_get(
-            f"/prebooks/{prebook_id}",
+            f"/prebooks/{_path_segment(prebook_id)}",
             params=params or None,
         )
         return response.get("data", {})
 
     def get_booking(self, booking_id):
         """GET /bookings/{bookingId} — retrieve a single booking."""
-        response = self._book_get(f"/bookings/{booking_id}")
+        response = self._book_get(f"/bookings/{_path_segment(booking_id)}")
         return response.get("data", {})
 
     def list_bookings(self, guest_id=None, client_reference=None, timeout=None):
@@ -370,13 +459,13 @@ class LiteAPIAdapter(BaseAdapter):
         return response.get("count", len(data)), data
 
     def cancel_booking(self, booking_id, timeout=None):
-        """PUT /bookings/{bookingId} — cancel a confirmed booking."""
+        
         params = {}
         if timeout is not None:
             params["timeout"] = timeout
 
         response = self._book_put(
-            f"/bookings/{booking_id}",
+            f"/bookings/{_path_segment(booking_id)}",
             params=params or None,
         )
         return response.get("data", {})
@@ -390,7 +479,7 @@ class LiteAPIAdapter(BaseAdapter):
         refundable_rates_only=False,
         board_type=None,
     ):
-        """POST /bookings/{bookingId}/alternative-prebooks — amend dates/occupancy."""
+        
         payload = {
             "occupancies": occupancies,
             "checkin": checkin,
@@ -402,19 +491,19 @@ class LiteAPIAdapter(BaseAdapter):
             payload["boardType"] = board_type
 
         response = self._book_request(
-            f"/bookings/{booking_id}/alternative-prebooks",
+            f"/bookings/{_path_segment(booking_id)}/alternative-prebooks",
             payload,
         )
         return response.get("data", [])
 
     def amend_guest_name(self, booking_id, holder, remarks=None):
-        """PUT /bookings/{bookingId}/amend — update holder name and email."""
+    
         payload = {"holder": holder}
         if remarks:
             payload["remarks"] = remarks
 
         response = self._book_put(
-            f"/bookings/{booking_id}/amend",
+            f"/bookings/{_path_segment(booking_id)}/amend",
             data=payload,
         )
         if response.get("bookingId"):
@@ -422,5 +511,5 @@ class LiteAPIAdapter(BaseAdapter):
         return response.get("data", response)
 
     def amend_dates(self, booking_id, check_in, check_out, guests):
-        """Amend dates"""
+        
         return {"booking_id": booking_id, "dates_updated": True}

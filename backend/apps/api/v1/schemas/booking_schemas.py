@@ -5,7 +5,10 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class PrebookRequest(BaseModel):
-    offer_id: str = Field(..., description="From hotel-rates or hotel-min-rates response")
+    offer_id: str = Field(
+        ...,
+        description="offer_id from hotel-rates or hotel-min-rates (not rate_id; search must be fresh)",
+    )
     use_payment_sdk: bool = Field(
         False,
         description="Set true only if using LiteAPI payment SDK on the client",
@@ -15,7 +18,13 @@ class PrebookRequest(BaseModel):
         ge=0,
         description="Agent commission flat amount (same as used in rates search)",
     )
-    voucher_code: Optional[str] = Field(None, description="Optional supplier voucher code")
+
+    @model_validator(mode="before")
+    @classmethod
+    def strip_offer_id(cls, data):
+        if isinstance(data, dict) and "offer_id" in data and data["offer_id"] is not None:
+            data = {**data, "offer_id": str(data["offer_id"]).strip()}
+        return data
 
 
 class PrebookRoomRate(BaseModel):
@@ -38,7 +47,7 @@ class PrebookResponse(BaseModel):
         None,
         description="GBB booking UUID when this prebook was created via POST /bookings/prebook",
     )
-    prebook_id: str = Field(..., description="Supplier prebook ID — required for confirm step")
+    prebook_id: str = Field(..., description="Prebook session ID — required for confirm step")
     hotel_id: str
     check_in: str
     check_out: str
@@ -64,7 +73,7 @@ class HolderInput(BaseModel):
     first_name: str
     last_name: str
     email: str
-    phone: str = Field("", description="Payer phone (required by supplier if empty use placeholder)")
+    phone: str = Field("", description="Payer phone (use a valid number if required)")
 
 
 class GuestInput(BaseModel):
@@ -82,7 +91,7 @@ class ConfirmBookingRequest(BaseModel):
     booking_id: Optional[str] = Field(
         None, description="GBB booking UUID from POST /bookings/prebook"
     )
-    prebook_id: Optional[str] = Field(None, description="Supplier prebook ID (alternative to booking_id)")
+    prebook_id: Optional[str] = Field(None, description="Prebook session ID (alternative to booking_id)")
     holder: HolderInput
     guests: List[GuestInput] = Field(..., min_length=1)
     payment_method: PaymentMethod = Field(
@@ -102,7 +111,9 @@ class ConfirmBookingRequest(BaseModel):
 
 class ConfirmBookingResponse(BaseModel):
     booking_id: str = Field(..., description="GBB booking reference (UUID)")
-    supplier_booking_id: str
+    booking_reference: str = Field(
+        ..., description="Confirmed booking reference for GET/PUT /bookings/{reference}"
+    )
     status: str
     hotel_id: str
     hotel_name: str = ""
@@ -120,7 +131,9 @@ class BookingListItem(BaseModel):
     booking_id: Optional[str] = Field(
         None, description="GBB booking UUID when matched to a local record"
     )
-    supplier_booking_id: str
+    booking_reference: str = Field(
+        ..., description="Booking reference for GET/PUT /bookings/{reference}"
+    )
     client_reference: str = ""
     prebook_id: str = ""
     status: str
@@ -201,8 +214,8 @@ class AlternativePrebooksResponse(BaseModel):
     booking_id: Optional[str] = Field(
         None, description="GBB booking UUID of the original booking"
     )
-    supplier_booking_id: str = Field(
-        ..., description="Original supplier booking ID (existingBookingId for rebook)"
+    booking_reference: str = Field(
+        ..., description="Original confirmed booking reference"
     )
     alternatives: List[AlternativePrebookOption]
     total: int
@@ -217,8 +230,8 @@ class AmendGuestResponse(BaseModel):
     booking_id: Optional[str] = Field(
         None, description="GBB booking UUID when matched to a local record"
     )
-    supplier_booking_id: str
-    amendment_id: Optional[int] = Field(None, description="Supplier amendment request ID")
+    booking_reference: str
+    amendment_id: Optional[int] = Field(None, description="Amendment request ID")
     status: str = Field(..., description="Amendment status (e.g. PENDING)")
     holder_first_name: str
     holder_last_name: str
@@ -230,7 +243,7 @@ class CancelBookingResponse(BaseModel):
     booking_id: Optional[str] = Field(
         None, description="GBB booking UUID when matched to a local record"
     )
-    supplier_booking_id: str
+    booking_reference: str
     status: str = Field(
         ...,
         description="CANCELLED (refunded) or CANCELLED_WITH_CHARGES",
@@ -244,7 +257,9 @@ class BookingDetailResponse(BaseModel):
     booking_id: Optional[str] = Field(
         None, description="GBB booking UUID when matched to a local record"
     )
-    supplier_booking_id: str
+    booking_reference: str = Field(
+        ..., description="Booking reference for GET/PUT /bookings/{reference}"
+    )
     client_reference: str = ""
     prebook_id: str = ""
     status: str

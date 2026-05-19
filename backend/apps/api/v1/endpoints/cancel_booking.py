@@ -52,11 +52,11 @@ async def cancel_booking(
         if exc.response.status_code == 404:
             raise HttpError(404, "Booking not found") from exc
         logger.exception("Cancel booking failed for agent %s", agent.company_name)
-        detail = str(exc) if settings.DEBUG else "Unable to cancel booking with supplier"
+        detail = str(exc) if settings.DEBUG else "Unable to cancel booking"
         raise HttpError(502, detail) from exc
     except Exception as exc:
         logger.exception("Cancel booking failed for agent %s", agent.company_name)
-        detail = str(exc) if settings.DEBUG else "Unable to cancel booking with supplier"
+        detail = str(exc) if settings.DEBUG else "Unable to cancel booking"
         raise HttpError(502, detail) from exc
 
     return CancelBookingResponse(**result)

@@ -1,0 +1,32 @@
+from enum import Enum
+
+class WholesalerCurrency(str, Enum):
+
+
+    AED = "AED"
+    AUD = "AUD"
+    BRL = "BRL"
+    CAD = "CAD"
+    CNY = "CNY"
+    EUR = "EUR"
+    FJD = "FJD"
+    GBP = "GBP"
+    HKD = "HKD"
+    IDR = "IDR"
+    INR = "INR"
+    JPY = "JPY"
+    LKR = "LKR"
+    MAD = "MAD"
+    MNT = "MNT"
+    MUR = "MUR"
+    MXN = "MXN"
+    MYR = "MYR"
+    OMR = "OMR"
+    PHP = "PHP"
+    RUB = "RUB"
+    SAR = "SAR"
+    SGD = "SGD"
+    THB = "THB"
+    TWD = "TWD"
+    USD = "USD"
+    ZAR = "ZAR"

@@ -20,6 +20,8 @@ def seed_liteapi_supplier(db):
     )
 
 
+
+
 @pytest.fixture
 def api_client() -> AsyncClient:
     return AsyncClient()

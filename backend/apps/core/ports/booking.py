@@ -8,7 +8,6 @@ class BookingSupplierPort(Protocol):
         self,
         offer_id: str,
         use_payment_sdk: bool = False,
-        voucher_code: str | None = None,
     ) -> dict[str, Any]: ...
 
     async def get_prebook(

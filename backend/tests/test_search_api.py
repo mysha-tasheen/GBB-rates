@@ -23,6 +23,28 @@ async def test_list_countries_unauthorized(api_client):
 
 
 @pytest.mark.asyncio
+async def test_list_currencies_unauthorized(api_client):
+    response = await api_get(api_client, f"{API_PREFIX}/currencies")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_list_currencies(api_client, auth_headers, nuitee_required):
+    response = await api_get(
+        api_client, f"{API_PREFIX}/currencies", headers=auth_headers
+    )
+    assert_ok(response, 200)
+    data = response.json()
+    assert data["total"] >= 1
+    codes = {c["code"] for c in data["currencies"]}
+    assert "FJD" in codes
+    assert "USD" in codes
+    fjd = next(c for c in data["currencies"] if c["code"] == "FJD")
+    assert fjd["name"]
+    assert isinstance(fjd["countries"], list)
+
+
+@pytest.mark.asyncio
 async def test_list_countries(api_client, auth_headers, nuitee_required):
     response = await api_get(
         api_client, f"{API_PREFIX}/countries", headers=auth_headers
@@ -115,3 +137,5 @@ async def test_hotel_rates(api_client, auth_headers, nuitee_required):
     data = response.json()
     assert data["hotel"]["hotel_id"] == hotel_id
     assert data["nights"] >= 1
+    assert data["rooms"], "Expected at least one room offer with rates"
+    assert any(room["rates"] for room in data["rooms"])

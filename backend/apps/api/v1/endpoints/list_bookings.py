@@ -23,7 +23,7 @@ async def list_bookings(
     booking_end_date: date | None = Query(None),
     status: str | None = Query(None),
     payment_status: str | None = Query(None),
-    timeout: float = Query(4, ge=1, le=30),
+    timeout: float | None = Query(None, ge=1, le=30),
 ):
     
     agent, _ = request.auth
@@ -57,7 +57,7 @@ async def list_bookings(
         raise HttpError(400, str(exc)) from exc
     except Exception as exc:
         logger.exception("List bookings failed for agent %s", agent.company_name)
-        detail = str(exc) if settings.DEBUG else "Unable to list bookings from supplier"
+        detail = str(exc) if settings.DEBUG else "Unable to list bookings"
         raise HttpError(502, detail) from exc
 
     items = []

@@ -58,7 +58,7 @@ async def create_alternative_prebooks(
             "Alternative prebooks failed for agent %s", agent.company_name
         )
         detail = (
-            str(exc) if settings.DEBUG else "Unable to fetch alternatives from supplier"
+            str(exc) if settings.DEBUG else "Unable to fetch alternatives"
         )
         raise HttpError(502, detail) from exc
     except Exception as exc:
@@ -66,13 +66,13 @@ async def create_alternative_prebooks(
             "Alternative prebooks failed for agent %s", agent.company_name
         )
         detail = (
-            str(exc) if settings.DEBUG else "Unable to fetch alternatives from supplier"
+            str(exc) if settings.DEBUG else "Unable to fetch alternatives"
         )
         raise HttpError(502, detail) from exc
 
     return AlternativePrebooksResponse(
         booking_id=local.id if local else None,
-        supplier_booking_id=supplier_booking_id,
+        booking_reference=supplier_booking_id,
         alternatives=[AlternativePrebookOption(**opt) for opt in options],
         total=len(options),
     )

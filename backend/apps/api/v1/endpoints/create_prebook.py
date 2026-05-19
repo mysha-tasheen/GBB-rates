@@ -1,6 +1,8 @@
 import logging
+import urllib.error
 
 from asgiref.sync import sync_to_async
+from apps.core.exceptions import SupplierAPIError
 from django.conf import settings
 from ninja import Query, Router
 from ninja.errors import HttpError
@@ -44,7 +46,6 @@ async def create_prebook(request, payload: PrebookRequest):
             offer_id=payload.offer_id,
             use_payment_sdk=payload.use_payment_sdk,
             agent_commission=payload.commission,
-            voucher_code=payload.voucher_code,
         )
         record = await sync_to_async(booking_service.save_prebook, thread_sensitive=True)(
             agent_id=str(agent.id),
@@ -53,10 +54,16 @@ async def create_prebook(request, payload: PrebookRequest):
         )
         agent_view = agent_prebook.to_agent_dict()
     except ValueError as exc:
-        raise HttpError(503, str(exc)) from exc
+        raise HttpError(400, str(exc)) from exc
+    except SupplierAPIError as exc:
+        if exc.status_code == 400:
+            raise HttpError(400, exc.message) from exc
+        logger.exception("Prebook failed for agent %s", agent.company_name)
+        detail = str(exc) if settings.DEBUG else "Unable to create prebook"
+        raise HttpError(502, detail) from exc
     except Exception as exc:
         logger.exception("Prebook failed for agent %s", agent.company_name)
-        detail = str(exc) if settings.DEBUG else "Unable to create prebook with supplier"
+        detail = str(exc) if settings.DEBUG else "Unable to create prebook"
         raise HttpError(502, detail) from exc
 
     return _to_prebook_response(agent_view, booking_id=record.id)
@@ -86,9 +93,15 @@ async def get_prebook(
         agent_view = agent_prebook.to_agent_dict()
     except ValueError as exc:
         raise HttpError(404, str(exc)) from exc
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise HttpError(404, "Prebook session not found or expired") from exc
+        logger.exception("Get prebook failed for agent %s", agent.company_name)
+        detail = str(exc) if settings.DEBUG else "Unable to retrieve prebook"
+        raise HttpError(502, detail) from exc
     except Exception as exc:
         logger.exception("Get prebook failed for agent %s", agent.company_name)
-        detail = str(exc) if settings.DEBUG else "Unable to retrieve prebook from supplier"
+        detail = str(exc) if settings.DEBUG else "Unable to retrieve prebook"
         raise HttpError(502, detail) from exc
 
     return _to_prebook_response(agent_view, booking_id=local.id if local else None)

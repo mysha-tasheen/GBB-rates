@@ -40,7 +40,7 @@ async def confirm_booking(request, payload: ConfirmBookingRequest):
             client_reference=payload.client_reference,
         )
         await sync_to_async(booking_service.mark_confirmed, thread_sensitive=True)(
-            record.id, result["supplier_booking_id"]
+            record.id, result["booking_reference"]
         )
     except ValueError as exc:
         if "Supplier did not confirm" in str(exc):
@@ -50,7 +50,7 @@ async def confirm_booking(request, payload: ConfirmBookingRequest):
         raise HttpError(400, str(exc)) from exc
     except Exception as exc:
         logger.exception("Confirm booking failed for agent %s", agent.company_name)
-        detail = str(exc) if settings.DEBUG else "Unable to confirm booking with supplier"
+        detail = str(exc) if settings.DEBUG else "Unable to confirm booking"
         raise HttpError(502, detail) from exc
 
     return ConfirmBookingResponse(**result)

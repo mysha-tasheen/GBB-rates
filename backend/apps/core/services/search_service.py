@@ -1,6 +1,8 @@
 import logging
 from datetime import date
 from typing import Any, Dict, List
+
+from apps.core.async_bridge import run_sync
 from apps.core.ports.search import SearchSupplierPort
 
 logger = logging.getLogger(__name__)
@@ -29,7 +31,8 @@ class SearchService:
 
         for supplier_name, supplier in self._suppliers.items():
             try:
-                results = await supplier.get_hotel_rates(
+                results = await run_sync(
+                    supplier.get_hotel_rates,
                     hotel_id=hotel_id,
                     check_in=check_in,
                     check_out=check_out,
@@ -64,7 +67,8 @@ class SearchService:
             if not get_min_rates:
                 continue
             try:
-                rates = await get_min_rates(
+                rates = await run_sync(
+                    get_min_rates,
                     hotel_ids=hotel_ids,
                     check_in=check_in,
                     check_out=check_out,

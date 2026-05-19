@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from apps.core.domain.booking import Booking
@@ -6,8 +7,13 @@ from apps.core.exceptions import BookingNotFound
 from apps.core.models import Booking as BookingModel
 
 
+def _truncate(value: str, max_len: int) -> str:
+    if not value:
+        return ""
+    return value[:max_len]
+
+
 class BookingRepository:
-    
 
     def create_prebook(
         self,
@@ -21,8 +27,8 @@ class BookingRepository:
             prebook_id=internal.prebook_id,
             transaction_id=internal.transaction_id,
             hotel_id=agent.hotel_id,
-            rate_id=internal.rate_id,
-            offer_id=internal.offer_id,
+            rate_id=_truncate(internal.rate_id, 500),
+            offer_id=_truncate(internal.offer_id, 500),
             supplier_price=Decimal(str(internal.supplier_price)),
             commission_percent=Decimal(str(internal.commission_percent)),
             commission_amount=Decimal(str(internal.commission_amount)),
@@ -61,9 +67,14 @@ class BookingRepository:
     def find_by_reference_for_agent(
         self, agent_id: str, reference: str
     ) -> Booking | None:
-        row = BookingModel.objects.filter(agent_id=agent_id, id=reference).first()
-        if row:
-            return self._to_domain(row)
+        try:
+            uuid.UUID(reference)
+        except ValueError:
+            pass
+        else:
+            row = BookingModel.objects.filter(agent_id=agent_id, id=reference).first()
+            if row:
+                return self._to_domain(row)
 
         row = BookingModel.objects.filter(
             agent_id=agent_id, supplier_booking_id=reference

@@ -1,5 +1,7 @@
 # Pure Python Rewrite (no type hints, pure value types, no typing module)
+from apps.core.async_bridge import run_sync
 from apps.core.domain.booking import Booking
+from apps.core.exceptions import SupplierAPIError
 from apps.core.domain.prebook import AgentPrebook, PrebookInternal, PrebookRoom
 from apps.core.ports.booking import BookingSupplierPort
 from apps.core.repositories.booking import BookingRepository
@@ -113,24 +115,43 @@ class BookingService:
             return (local.agent_price, local.id)
         return (self._commissions.middleware_price(supplier_price).agent_price, None)
 
-    async def prebook(self, offer_id, use_payment_sdk, agent_commission, voucher_code=None):
-        raw = await self._supplier.create_prebook(
-            offer_id=offer_id,
-            use_payment_sdk=use_payment_sdk,
-            voucher_code=voucher_code,
-        )
+    async def prebook(self, offer_id, use_payment_sdk, agent_commission):
+        offer_id = (offer_id or "").strip()
+        if not offer_id:
+            raise ValueError("offer_id is required")
+
+        try:
+            raw = await run_sync(
+                self._supplier.create_prebook,
+                offer_id=offer_id,
+                use_payment_sdk=use_payment_sdk,
+            )
+        except SupplierAPIError as exc:
+            if exc.status_code == 400:
+                raise ValueError(
+                    exc.message or "Invalid or expired offer_id — run hotel-rates again"
+                ) from exc
+            raise
         if not raw.get("prebookId"):
-            raise ValueError("Supplier did not return a prebook session")
-        return self.parse_prebook(raw, agent_commission)
+            raise ValueError("Prebook session could not be created — try a fresh offer_id")
+        return await run_sync(self.parse_prebook, raw, agent_commission)
 
     async def get_prebook(self, prebook_id, agent_commission, include_credit_balance=False):
-        raw = await self._supplier.get_prebook(
-            prebook_id,
-            include_credit_balance=include_credit_balance,
-        )
+        import urllib.error
+
+        try:
+            raw = await run_sync(
+                self._supplier.get_prebook,
+                prebook_id,
+                include_credit_balance=include_credit_balance,
+            )
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                raise ValueError("Prebook session not found or expired") from exc
+            raise
         if not raw.get("prebookId"):
             raise ValueError("Prebook session not found")
-        agent, _ = self.parse_prebook(raw, agent_commission)
+        agent, _ = await run_sync(self.parse_prebook, raw, agent_commission)
         if include_credit_balance:
             credit = raw.get("creditLine") or {}
             if credit:
@@ -153,7 +174,12 @@ class BookingService:
         return agent
 
     async def get_booking(self, supplier_booking_id):
-        raw = await self._supplier.get_booking(supplier_booking_id)
+        try:
+            raw = await run_sync(self._supplier.get_booking, supplier_booking_id)
+        except SupplierAPIError as exc:
+            if exc.status_code == 404:
+                raise ValueError("Booking not found") from exc
+            raise
         if not raw.get("bookingId"):
             raise ValueError("Booking not found")
         return raw
@@ -170,7 +196,8 @@ class BookingService:
             tx_id = None
         ref = client_reference or booking.id
 
-        raw = await self._supplier.confirm_booking(
+        raw = await run_sync(
+            self._supplier.confirm_booking,
             prebook_id=booking.prebook_id,
             holder=self._liteapi_holder(holder),
             guests=self._liteapi_guests(guests),
@@ -180,23 +207,26 @@ class BookingService:
         )
         if not raw.get("bookingId"):
             raise ValueError("Supplier did not confirm the booking")
-        return self.parse_confirm(raw, booking, holder)
+        return await run_sync(self.parse_confirm, raw, booking, holder)
 
     async def cancel(self, supplier_booking_id, local=None, timeout=None):
-        raw = await self._supplier.cancel_booking(supplier_booking_id, timeout=timeout)
+        raw = await run_sync(
+            self._supplier.cancel_booking, supplier_booking_id, timeout=timeout
+        )
         if not raw.get("bookingId"):
             raise ValueError("Supplier did not cancel the booking")
-        return self.parse_cancel(raw, local)
+        return await run_sync(self.parse_cancel, raw, local)
 
     async def amend_holder(self, supplier_booking_id, holder, remarks=None, local=None):
-        raw = await self._supplier.amend_guest_name(
+        raw = await run_sync(
+            self._supplier.amend_guest_name,
             supplier_booking_id,
             holder=self._liteapi_amend_holder(holder),
             remarks=remarks,
         )
         if not raw.get("bookingId"):
             raise ValueError("Supplier did not accept the amendment")
-        return self.parse_amend(raw, local)
+        return await run_sync(self.parse_amend, raw, local)
 
     async def alternative_prebooks(
         self,
@@ -214,7 +244,8 @@ class BookingService:
                 "adults": occ["adults"],
                 "children": occ.get("children") or []
             })
-        raw_list = await self._supplier.create_alternative_prebooks(
+        raw_list = await run_sync(
+            self._supplier.create_alternative_prebooks,
             supplier_booking_id,
             occupancies=liteapi_occupancies,
             checkin=check_in,
@@ -225,13 +256,17 @@ class BookingService:
         result = []
         for item in raw_list:
             if item.get("prebookId"):
-                result.append(self.parse_alternative_option(item, agent_commission))
+                parsed = await run_sync(
+                    self.parse_alternative_option, item, agent_commission
+                )
+                result.append(parsed)
         return result
 
     async def list_bookings(self, guest_id=None, client_reference=None, timeout=None):
         if not guest_id and not client_reference:
             raise ValueError("guest_id or client_reference is required")
-        return await self._supplier.list_bookings(
+        return await run_sync(
+            self._supplier.list_bookings,
             guest_id=guest_id,
             client_reference=client_reference,
             timeout=timeout,
@@ -247,15 +282,23 @@ class BookingService:
         payment_status=None,
         timeout=None,
     ):
-        return await self._supplier.list_all_bookings(
-            start_date=start_date,
-            end_date=end_date,
-            booking_start_date=booking_start_date,
-            booking_end_date=booking_end_date,
-            status=status,
-            payment_status=payment_status,
-            timeout=timeout,
-        )
+        import urllib.error
+
+        try:
+            return await run_sync(
+                self._supplier.list_all_bookings,
+                start_date=start_date,
+                end_date=end_date,
+                booking_start_date=booking_start_date,
+                booking_end_date=booking_end_date,
+                status=status,
+                payment_status=payment_status,
+                timeout=timeout,
+            )
+        except urllib.error.HTTPError as exc:
+            if exc.code == 400:
+                return 0, []
+            raise
 
     def parse_list_item(self, item, local=None):
         hotel = item.get("hotel") or {}
@@ -274,7 +317,7 @@ class BookingService:
 
         return {
             "booking_id": booking_id,
-            "supplier_booking_id": item.get("bookingId", ""),
+            "booking_reference": item.get("bookingId", ""),
             "client_reference": item.get("clientReference") or "",
             "prebook_id": item.get("prebookId") or "",
             "status": item.get("status", ""),
@@ -305,7 +348,7 @@ class BookingService:
 
         return {
             "booking_id": booking_id,
-            "supplier_booking_id": supplier_booking_id,
+            "booking_reference": supplier_booking_id,
             "client_reference": item.get("clientReference") or item.get("client_reference") or "",
             "prebook_id": item.get("prebookId") or item.get("prebook_Id") or "",
             "status": item.get("status", ""),
@@ -391,7 +434,7 @@ class BookingService:
     def parse_cancel(data, local=None):
         return {
             "booking_id": local.id if local else None,
-            "supplier_booking_id": data.get("bookingId", ""),
+            "booking_reference": data.get("bookingId", ""),
             "status": data.get("status", ""),
             "cancellation_fee": float(data.get("cancellation_fee") or 0),
             "refund_amount": float(data.get("refund_amount") or 0),
@@ -402,7 +445,7 @@ class BookingService:
     def parse_amend(data, local=None):
         return {
             "booking_id": local.id if local else None,
-            "supplier_booking_id": data.get("bookingId", ""),
+            "booking_reference": data.get("bookingId", ""),
             "amendment_id": data.get("id"),
             "status": data.get("status", ""),
             "holder_first_name": data.get("holderFirstName", ""),
@@ -423,7 +466,7 @@ class BookingService:
 
         return {
             "booking_id": booking.id,
-            "supplier_booking_id": data.get("bookingId", ""),
+            "booking_reference": data.get("bookingId", ""),
             "status": data.get("status", "CONFIRMED"),
             "hotel_id": hotel.get("hotelId", booking.hotel_id),
             "hotel_name": hotel.get("name", ""),

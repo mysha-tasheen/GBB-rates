@@ -84,7 +84,7 @@ async def test_confirm_unknown_booking(api_client, auth_headers):
 async def test_get_booking_not_found(api_client, auth_headers, nuitee_required):
     response = await api_get(
         api_client,
-        f"{API_PREFIX}/bookings/nonexistent-supplier-booking-id",
+        f"{API_PREFIX}/bookings/00000000-0000-0000-0000-000000000099",
         headers=auth_headers,
     )
     assert response.status_code == 404
@@ -124,8 +124,12 @@ async def test_create_and_get_prebook(api_client, auth_headers, nuitee_required)
 
 @pytest.mark.asyncio
 async def test_list_bookings_inventory(api_client, auth_headers, nuitee_required):
+    check_in, check_out = future_stay()
     response = await api_get(
-        api_client, f"{API_PREFIX}/bookings", headers=auth_headers
+        api_client,
+        f"{API_PREFIX}/bookings",
+        query={"start_date": check_in, "end_date": check_out},
+        headers=auth_headers,
     )
     assert_ok(response, 200)
     data = response.json()
@@ -136,7 +140,7 @@ async def test_list_bookings_inventory(api_client, auth_headers, nuitee_required
 @pytest.mark.booking_flow
 @pytest.mark.asyncio
 async def test_confirm_get_cancel_booking(api_client, auth_headers, booking_flow_required):
-    """Live sandbox: prebook → confirm → get → cancel (costs sandbox credit)."""
+    
     _, offer_id, _, _ = await _us_hotel_and_offer(api_client, auth_headers)
 
     prebook = (
@@ -173,21 +177,21 @@ async def test_confirm_get_cancel_booking(api_client, auth_headers, booking_flow
     )
     assert_ok(confirm, 200)
     confirmed = confirm.json()
-    assert confirmed["supplier_booking_id"]
+    assert confirmed["booking_reference"]
     assert confirmed["status"]
 
-    supplier_id = confirmed["supplier_booking_id"]
+    reference = confirmed["booking_reference"]
 
     detail = await api_get(
         api_client,
-        f"{API_PREFIX}/bookings/{supplier_id}",
+        f"{API_PREFIX}/bookings/{reference}",
         headers=auth_headers,
     )
     assert_ok(detail, 200)
-    assert detail.json()["supplier_booking_id"] == supplier_id
+    assert detail.json()["booking_reference"] == reference
 
     cancel = await api_client.put(
-        f"{API_PREFIX}/bookings/{supplier_id}",
+        f"{API_PREFIX}/bookings/{reference}",
         headers=auth_headers,
     )
     assert_ok(cancel, 200)
@@ -197,7 +201,7 @@ async def test_confirm_get_cancel_booking(api_client, auth_headers, booking_flow
 @pytest.mark.booking_flow
 @pytest.mark.asyncio
 async def test_amend_guest_name(api_client, auth_headers, booking_flow_required):
-    """Amend holder on a confirmed sandbox booking."""
+    
     _, offer_id, _, _ = await _us_hotel_and_offer(api_client, auth_headers)
 
     prebook = (
@@ -233,11 +237,11 @@ async def test_amend_guest_name(api_client, auth_headers, booking_flow_required)
         )
     ).json()
 
-    supplier_id = confirm["supplier_booking_id"]
+    reference = confirm["booking_reference"]
 
     amend = await api_put_json(
         api_client,
-        f"{API_PREFIX}/bookings/{supplier_id}/amend",
+        f"{API_PREFIX}/bookings/{reference}/amend",
         {
             "holder": {
                 "first_name": "After",
@@ -254,14 +258,14 @@ async def test_amend_guest_name(api_client, auth_headers, booking_flow_required)
     assert data["holder_email"] == "after@test.gbb"
 
     await api_client.put(
-        f"{API_PREFIX}/bookings/{supplier_id}", headers=auth_headers
+        f"{API_PREFIX}/bookings/{reference}", headers=auth_headers
     )
 
 
 @pytest.mark.booking_flow
 @pytest.mark.asyncio
 async def test_alternative_prebooks(api_client, auth_headers, booking_flow_required):
-    """Hard amendment search on a confirmed booking."""
+    
     _, offer_id, _, _ = await _us_hotel_and_offer(api_client, auth_headers)
     check_in, check_out = future_stay(days_ahead=60, nights=3)
 
@@ -298,11 +302,11 @@ async def test_alternative_prebooks(api_client, auth_headers, booking_flow_requi
         )
     ).json()
 
-    supplier_id = confirm["supplier_booking_id"]
+    reference = confirm["booking_reference"]
 
     alt = await api_post_json(
         api_client,
-        f"{API_PREFIX}/bookings/{supplier_id}/alternative-prebooks",
+        f"{API_PREFIX}/bookings/{reference}/alternative-prebooks",
         {
             "occupancies": [{"adults": 2, "children": []}],
             "check_in": check_in,
@@ -313,9 +317,9 @@ async def test_alternative_prebooks(api_client, auth_headers, booking_flow_requi
     )
     assert_ok(alt, 200)
     data = alt.json()
-    assert data["supplier_booking_id"] == supplier_id
+    assert data["booking_reference"] == reference
     assert data["total"] >= 0
 
     await api_client.put(
-        f"{API_PREFIX}/bookings/{supplier_id}", headers=auth_headers
+        f"{API_PREFIX}/bookings/{reference}", headers=auth_headers
     )

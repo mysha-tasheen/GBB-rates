@@ -32,8 +32,7 @@ def map_hotel_min_rates_for_agent(
     )
 
 
-def map_hotel_rates_for_agent(internal: dict, total_suppliers: int) -> SearchResponseEssential:
-    
+def map_hotel_rates_for_agent(internal: dict, total_offers: int) -> SearchResponseEssential:
     rooms = []
     for room in internal.get("rooms", []):
         rates = [
@@ -49,12 +48,14 @@ def map_hotel_rates_for_agent(internal: dict, total_suppliers: int) -> SearchRes
                 payment_types=rate.get("payment_types", []),
             )
             for rate in room.get("rates", [])
+            if rate.get("_agent_price", 0) > 0
         ]
+        if not rates:
+            continue
         rooms.append(
             RoomTypeEssential(
                 room_type_id=room["room_type_id"],
                 offer_id=room["offer_id"],
-                supplier=room["supplier"],
                 rates=rates,
             )
         )
@@ -72,5 +73,5 @@ def map_hotel_rates_for_agent(internal: dict, total_suppliers: int) -> SearchRes
         check_out=internal["check_out"],
         nights=internal["nights"],
         rooms=rooms,
-        total_suppliers=total_suppliers,
+        total_offers=total_offers,
     )

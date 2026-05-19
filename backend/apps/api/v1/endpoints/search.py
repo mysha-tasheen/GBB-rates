@@ -13,6 +13,8 @@ from apps.api.v1.mappers import map_hotel_rates_for_agent
 from apps.api.v1.schemas.search_schemas import (
     CountriesResponse,
     Country,
+    CurrenciesResponse,
+    Currency,
     HotelEssential,
     HotelListResponse,
     HotelRatesRequest,
@@ -30,10 +32,25 @@ async def list_countries(request):
     try:
         countries = await catalog_service.list_countries()
     except Exception as exc:
-        supplier_error(exc, "Unable to load countries from supplier")
+        supplier_error(exc, "Unable to load countries")
 
     items = [Country(code=c["code"], name=c["name"]) for c in countries]
     return CountriesResponse(countries=items, total=len(items))
+
+
+@router.get("/currencies", response=CurrenciesResponse, auth=api_key_auth)
+async def list_currencies(request):
+    """Wholesaler reference: ISO codes and names for currency selection (e.g. FJD for Fiji)."""
+    try:
+        currencies = await catalog_service.list_currencies()
+    except Exception as exc:
+        supplier_error(exc, "Unable to load currencies")
+
+    items = [
+        Currency(code=c["code"], name=c["name"], countries=c.get("countries", []))
+        for c in currencies
+    ]
+    return CurrenciesResponse(currencies=items, total=len(items))
 
 
 @router.get("/hotels", response=HotelListResponse, auth=api_key_auth)
@@ -55,7 +72,7 @@ async def list_hotels(
             limit=limit,
         )
     except Exception as exc:
-        supplier_error(exc, "Unable to load hotels from supplier")
+        supplier_error(exc, "Unable to load hotels")
 
     items = [
         HotelSummary(
@@ -89,6 +106,17 @@ async def search_hotel_rates(request, payload: HotelRatesRequest):
     nights = (payload.check_out - payload.check_in).days
     guest_nationality = payload.guest_nationality.upper()
 
+    try:
+        suppliers = search_service._get()._suppliers
+    except Exception as exc:
+        supplier_error(exc, "Search is not configured")
+
+    if not suppliers:
+        supplier_error(
+            ValueError("Rates provider not configured"),
+            "Search is not configured — check NUITEE_API_KEY",
+        )
+
     results = await search_service.search_all_suppliers(
         hotel_id=payload.hotel_id,
         check_in=payload.check_in,
@@ -111,8 +139,8 @@ async def search_hotel_rates(request, payload: HotelRatesRequest):
             check_out=payload.check_out.isoformat(),
             nights=nights,
             rooms=[],
-            total_suppliers=0,
+            total_offers=0,
         )
 
     result = commission_service.apply_flat_to_hotel_rates(results[0], payload.commission)
-    return map_hotel_rates_for_agent(result, total_suppliers=len(results))
+    return map_hotel_rates_for_agent(result, total_offers=len(results))

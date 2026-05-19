@@ -5,7 +5,7 @@ router = Router(tags=["auth"])
 
 
 @router.get("/me", auth=api_key_auth)
-def me(request):
+async def me(request):
     agent, api_key = request.auth
     return {
         "agent_id": str(agent.id),

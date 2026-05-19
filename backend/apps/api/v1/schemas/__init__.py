@@ -1,6 +1,8 @@
 from apps.api.v1.schemas.search_schemas import (
     CountriesResponse,
     Country,
+    CurrenciesResponse,
+    Currency,
     HotelEssential,
     HotelListResponse,
     HotelMinRate,
@@ -16,6 +18,8 @@ from apps.api.v1.schemas.search_schemas import (
 __all__ = [
     "CountriesResponse",
     "Country",
+    "CurrenciesResponse",
+    "Currency",
     "HotelEssential",
     "HotelListResponse",
     "HotelMinRate",

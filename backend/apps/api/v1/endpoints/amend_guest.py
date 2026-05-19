@@ -42,11 +42,11 @@ async def amend_guest_name(request, reference: str, payload: AmendGuestRequest):
         if exc.response.status_code == 404:
             raise HttpError(404, "Booking not found") from exc
         logger.exception("Amend guest failed for agent %s", agent.company_name)
-        detail = str(exc) if settings.DEBUG else "Unable to amend booking with supplier"
+        detail = str(exc) if settings.DEBUG else "Unable to amend booking"
         raise HttpError(502, detail) from exc
     except Exception as exc:
         logger.exception("Amend guest failed for agent %s", agent.company_name)
-        detail = str(exc) if settings.DEBUG else "Unable to amend booking with supplier"
+        detail = str(exc) if settings.DEBUG else "Unable to amend booking"
         raise HttpError(502, detail) from exc
 
     return AmendGuestResponse(**result)
